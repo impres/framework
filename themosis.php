@@ -188,7 +188,7 @@ if (!class_exists('Themosis')) {
             add_action('admin_head', [$this, 'adminHead']);
             add_action('template_redirect', 'redirect_canonical');
             add_action('template_redirect', 'wp_redirect_admin_locations');
-            add_action('template_redirect', [$this, 'setRouter'], 9999);
+            add_action('template_redirect', [$this, 'setRouter'], 20);
         }
 
         /**
