@@ -7,8 +7,8 @@
                     @foreach($choices as $label => $choice)
                         <?php
                             $checked = $field->checked(function ($value, $choice) {
-                                return ! is_null($value) && $value === $choice ? 'checked' : '';
-                            }, [$field->getValue(), $choice]);
+                                return ! empty($value) && $value === $choice ? 'checked' : '';
+                            }, [$field->getRawValue(), $choice]);
                         ?>
                         <label>
                             <input type="radio" name="{{ $field->getName() }}" value="{{ $choice }}" {{ $checked }}>{{ $label }}
@@ -19,8 +19,8 @@
         @else
             <?php
                 $checked = $field->checked(function ($value, $choice) {
-                    return ! is_null($value) && $value === $choice ? 'checked' : '';
-                }, [$field->getValue(), $choices]);
+                    return ! empty($value) && $value === $choice ? 'checked' : '';
+                }, [$field->getRawValue(), $choices]);
             ?>
             <label>
                 <input type="radio" name="{{ $field->getName() }}" value="{{ $choices }}" {{ $checked }}>{{ $group }}

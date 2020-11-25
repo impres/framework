@@ -4,7 +4,6 @@ namespace Themosis\Core\Http;
 
 use Exception;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response as IlluminateResponse;
 use Illuminate\Routing\Pipeline;
 use Illuminate\Support\Facades\Facade;
@@ -126,6 +125,18 @@ class Kernel implements \Illuminate\Contracts\Http\Kernel
         );
 
         return $response;
+    }
+
+    /**
+     * Determine if the kernel has a given middleware.
+     *
+     * @param string $middleware
+     *
+     * @return bool
+     */
+    public function hasMiddleware($middleware)
+    {
+        return in_array($middleware, $this->middleware);
     }
 
     /**
@@ -253,6 +264,38 @@ class Kernel implements \Illuminate\Contracts\Http\Kernel
     }
 
     /**
+     * Add a new middleware to beginning of the stack if it does not already exist.
+     *
+     * @param string $middleware
+     *
+     * @return $this
+     */
+    public function prependMiddleware($middleware)
+    {
+        if (array_search($middleware, $this->middleware) === false) {
+            array_unshift($this->middleware, $middleware);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Add a new middleware to end of the stack if it does not already exist.
+     *
+     * @param string $middleware
+     *
+     * @return $this
+     */
+    public function pushMiddleware($middleware)
+    {
+        if (array_search($middleware, $this->middleware) === false) {
+            $this->middleware[] = $middleware;
+        }
+
+        return $this;
+    }
+
+    /**
      * Return the application instance.
      *
      * @return Application
@@ -260,6 +303,26 @@ class Kernel implements \Illuminate\Contracts\Http\Kernel
     public function getApplication()
     {
         return $this->app;
+    }
+
+    /**
+     * Get the application's route middleware groups.
+     *
+     * @return array
+     */
+    public function getMiddlewareGroups()
+    {
+        return $this->middlewareGroups;
+    }
+
+    /**
+     * Get the application's route middleware.
+     *
+     * @return array
+     */
+    public function getRouteMiddleware()
+    {
+        return $this->routeMiddleware;
     }
 
     /**

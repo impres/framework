@@ -14,12 +14,15 @@ use Illuminate\Http\Request;
 use Illuminate\Log\LogServiceProvider;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Env;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\Finder\SplFileInfo;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Themosis\Core\Bootstrap\EnvironmentLoader;
 use Themosis\Core\Events\LocaleUpdated;
@@ -32,7 +35,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      *
      * @var string
      */
-    const VERSION = '2.0.0-beta1';
+    const VERSION = '2.0.6';
 
     /**
      * Application textdomain.
@@ -47,7 +50,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     protected $basePath;
 
     /**
-     * Path location of env files.
+     * Path location (directory) of env files.
      *
      * @var string
      */
@@ -230,6 +233,10 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
                 \Illuminate\Database\Connection::class,
                 \Illuminate\Database\ConnectionInterface::class
             ],
+            'encrypter' => [
+                \Illuminate\Encryption\Encrypter::class,
+                \Illuminate\Contracts\Encryption\Encrypter::class
+            ],
             'events' => [
                 \Illuminate\Events\Dispatcher::class,
                 \Illuminate\Contracts\Events\Dispatcher::class
@@ -277,8 +284,23 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
             'posttype' => [
                 \Themosis\PostType\Factory::class
             ],
+            'queue' => [
+                \Illuminate\Queue\QueueManager::class,
+                \Illuminate\Contracts\Queue\Factory::class,
+                \Illuminate\Contracts\Queue\Monitor::class
+            ],
+            'queue.connection' => [
+                \Illuminate\Contracts\Queue\Queue::class
+            ],
+            'queue.failer' => [
+                \Illuminate\Queue\Failed\FailedJobProviderInterface::class
+            ],
             'redirect' => [
                 \Illuminate\Routing\Redirector::class
+            ],
+            'redis' => [
+                \Illuminate\Redis\RedisManager::class,
+                \Illuminate\Contracts\Redis\Factory::class
             ],
             'request' => [
                 \Illuminate\Http\Request::class,
@@ -299,6 +321,9 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
             ],
             'taxonomy' => [
                 \Themosis\Taxonomy\Factory::class
+            ],
+            'taxonomy.field' => [
+                \Themosis\Taxonomy\TaxonomyFieldFactory::class
             ],
             'translator' => [
                 \Illuminate\Translation\Translator::class,
@@ -601,7 +626,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     }
 
     /**
-     * Return the environment path.
+     * Return the environment path directory.
      *
      * @return string
      */
@@ -635,22 +660,28 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     }
 
     /**
+     * Return the environment file path.
+     *
+     * @return string
+     */
+    public function environmentFilePath()
+    {
+        return $this->environmentPath().DIRECTORY_SEPARATOR.$this->environmentFile();
+    }
+
+    /**
      * Get or check the current application environment.
+     *
+     * @param string|array $environments
      *
      * @return string|bool
      */
-    public function environment()
+    public function environment(...$environments)
     {
-        if (func_num_args() > 0) {
-            $patterns = is_array(func_get_arg(0)) ? func_get_arg(0) : func_get_args();
+        if (count($environments) > 0) {
+            $patterns = is_array($environments[0]) ? $environments[0] : $environments;
 
-            foreach ($patterns as $pattern) {
-                if (Str::is($pattern, $this['env'])) {
-                    return true;
-                }
-            }
-
-            return false;
+            return Str::is($patterns, $this['env']);
         }
 
         return $this['env'];
@@ -786,7 +817,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $this->hasBeenBootstrapped = true;
 
         foreach ($bootstrappers as $bootstrapper) {
-            $this['events']->fire('bootstrapping: '.$bootstrapper, [$this]);
+            $this['events']->dispatch('bootstrapping: '.$bootstrapper, [$this]);
 
             /*
              * Instantiate each bootstrap class and call its "bootstrap" method
@@ -794,7 +825,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
              */
             $this->make($bootstrapper)->bootstrap($this);
 
-            $this['events']->fire('bootstrapped: '.$bootstrapper, [$this]);
+            $this['events']->dispatch('bootstrapped: '.$bootstrapper, [$this]);
         }
     }
 
@@ -880,7 +911,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function getCachedServicesPath()
     {
-        return $this->bootstrapPath('cache/services.php');
+        return $this->normalizeCachePath('APP_SERVICES_CACHE', 'cache/services.php');
     }
 
     /**
@@ -890,7 +921,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function getCachedPackagesPath()
     {
-        return $this->bootstrapPath('cache/packages.php');
+        return $this->normalizeCachePath('APP_PACKAGES_CACHE', 'cache/packages.php');
     }
 
     /**
@@ -910,7 +941,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function getCachedConfigPath()
     {
-        return $this->bootstrapPath('cache/config.php');
+        return $this->normalizeCachePath('APP_CONFIG_CACHE', 'cache/config.php');
     }
 
     /**
@@ -1065,6 +1096,8 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      * @param string $abstract
      * @param array  $parameters
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return mixed
      */
     public function make($abstract, array $parameters = [])
@@ -1161,7 +1194,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     {
         $plugin = (new PluginManager($this, $filePath, new ClassLoader()))->load($configPath);
 
-        $this->instance('wp.plugin.'.$plugin->getDirectory(), $plugin);
+        $this->instance('wp.plugin.'.$plugin->getHeader('plugin_id'), $plugin);
 
         return $plugin;
     }
@@ -1179,7 +1212,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     {
         $directories = Collection::make((new Filesystem())->directories($this->mupluginsPath()))
             ->map(function ($directory) {
-                return ltrim(substr($directory, strrpos($directory, '/')), '\/');
+                return ltrim(substr($directory, strrpos($directory, DS)), '\/');
             })->toArray();
 
         (new PluginsRepository($this, new Filesystem(), $pluginsPath, $this->getCachedPluginsPath()))
@@ -1323,6 +1356,22 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     }
 
     /**
+     * Throw an HttpException with the given data.
+     *
+     * @param int    $code
+     * @param string $message
+     * @param array  $headers
+     */
+    public function abort($code, $message = '', array $headers = [])
+    {
+        if (404 == $code) {
+            throw new NotFoundHttpException($message);
+        }
+
+        throw new HttpException($code, $message, null, $headers);
+    }
+
+    /**
      * Register a terminating callback with the application.
      *
      * @param Closure $callback
@@ -1347,7 +1396,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     }
 
     /**
-     * Handle incoming and request and returned response.
+     * Handle incoming request and return a response.
      * Abstract the implementation from the user for easy
      * theme integration.
      *
@@ -1366,6 +1415,54 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $kernel->terminate($request, $response);
 
         return $this;
+    }
+
+    /**
+     * Handle WordPress administration incoming request.
+     * Only send response headers.
+     *
+     * @param string                                    $kernel
+     * @param \Symfony\Component\HttpFoundation\Request $request
+     *
+     * @return $this;
+     */
+    public function manageAdmin(string $kernel, $request)
+    {
+        if (! $this->isWordPressAdmin() && ! $this->has('action')) {
+            return $this;
+        }
+
+        $this['action']->add('admin_init', $this->dispatchToAdmin($kernel, $request));
+
+        return $this;
+    }
+
+    /**
+     * Manage WordPress Admin Init.
+     * Handle incoming request and return a response.
+     *
+     * @param string $kernel
+     * @param $request
+     *
+     * @return Closure
+     */
+    protected function dispatchToAdmin(string $kernel, $request)
+    {
+        return function () use ($kernel, $request) {
+            $kernel = $this->make($kernel);
+
+            /** @var Response $response */
+            $response = $kernel->handle($request);
+
+            if (500 <= $response->getStatusCode()) {
+                // In case of an internal server error, we stop the process
+                // and send full response back to the user.
+                $response->send();
+            } else {
+                // HTTP OK - Send only the response headers.s
+                $response->sendHeaders();
+            }
+        };
     }
 
     /**
@@ -1477,7 +1574,62 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function getCachedRoutesPath()
     {
-        return $this->bootstrapPath('cache/routes.php');
+        return $this->normalizeCachePath('APP_ROUTES_CACHE', 'cache/routes.php');
+    }
+
+    /**
+     * Check if the application events are cached.
+     *
+     * @return bool
+     */
+    public function eventsAreCached()
+    {
+        return $this['files']->exists($this->getCachedEventsPath());
+    }
+
+    /**
+     * Get the path to the events cache file.
+     *
+     * @return string
+     */
+    public function getCachedEventsPath()
+    {
+        return $this->normalizeCachePath('APP_EVENTS_CACHE', 'cache/events.php');
+    }
+
+    /**
+     * Normalize a relative or absolute path to a cache file.
+     *
+     * @param string $key
+     * @param string $default
+     *
+     * @return string
+     */
+    protected function normalizeCachePath($key, $default)
+    {
+        if (is_null($env = Env::get($key))) {
+            return $this->bootstrapPath($default);
+        }
+
+        return Str::startsWith($env, '/')
+            ? $env
+            : $this->basePath($env);
+    }
+
+    /**
+     * Determine if we currently inside the WordPress administration.
+     *
+     * @return bool
+     */
+    public function isWordPressAdmin()
+    {
+        if (isset($GLOBALS['current_screen']) && is_a($GLOBALS['current_screen'], 'WP_Screen')) {
+            return $GLOBALS['current_screen']->in_admin();
+        } elseif (defined('WP_ADMIN')) {
+            return WP_ADMIN;
+        }
+
+        return false;
     }
 
     /**

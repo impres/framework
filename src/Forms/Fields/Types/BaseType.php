@@ -37,11 +37,13 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         'data',
         'data_type',
         'errors',
+        'flush',
         'group',
         'info',
         'l10n',
         'label',
         'label_attr',
+        'mapped',
         'messages',
         'placeholder',
         'rules',
@@ -56,11 +58,13 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      */
     protected $defaultOptions = [
         'attributes' => [],
+        'flush' => false,
         'group' => 'default',
         'info' => '',
         'l10n' => [],
         'label' => '',
         'label_attr' => [],
+        'mapped' => true,
         'messages' => [],
         'rules' => '',
         'show_in_rest' => false
@@ -192,6 +196,13 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      * @var string
      */
     protected $component;
+
+    /**
+     * Field view data.
+     *
+     * @var array
+     */
+    private $data = [];
 
     /**
      * BaseType constructor.
@@ -533,9 +544,28 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      */
     protected function getFieldData(): array
     {
-        return [
+        return array_merge($this->data, [
             '__field' => $this
-        ];
+        ]);
+    }
+
+    /**
+     * Pass custom data to the field view.
+     *
+     * @param array|string $key
+     * @param null         $value
+     *
+     * @return FieldTypeInterface
+     */
+    public function with($key, $value = null): FieldTypeInterface
+    {
+        if (is_array($key)) {
+            $this->data = array_merge($this->data, $key);
+        } else {
+            $this->data[$key] = $value;
+        }
+
+        return $this;
     }
 
     /**
@@ -649,7 +679,13 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      */
     public function getRawValue()
     {
-        return $this->transformer->reverseTransform($this->value);
+        $value = $this->transformer->reverseTransform($this->value);
+
+        if ($this->getOption('flush', false)) {
+            return '';
+        }
+
+        return $value;
     }
 
     /**

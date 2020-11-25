@@ -2,17 +2,42 @@
 
 namespace Themosis\User;
 
-use Themosis\Foundation\ServiceProvider;
+use Illuminate\Support\ServiceProvider;
+use Themosis\Forms\Fields\FieldsRepository;
 
 class UserServiceProvider extends ServiceProvider
 {
     public function register()
     {
-        $this->app->bind('user', function ($container) {
-            $view = $container['view'];
-            $view = $view->make('_themosisUserCore');
+        $this->registerUserFactory();
+        $this->registerUserField();
+    }
 
-            return new UserFactory($view, $container['validation'], $container['action']);
+    /**
+     * Register the user factory.
+     */
+    protected function registerUserFactory()
+    {
+        $this->app->bind('themosis.user', function ($app) {
+            return new Factory($app['validator']);
+        });
+    }
+
+    /**
+     * Register the user field.
+     */
+    protected function registerUserField()
+    {
+        $this->app->bind('themosis.user.field', function ($app) {
+            $viewFactory = $app['view'];
+            $viewFactory->addLocation(__DIR__.'/views');
+
+            return new UserField(
+                new FieldsRepository(),
+                $app['action'],
+                $viewFactory,
+                $app['validator']
+            );
         });
     }
 }

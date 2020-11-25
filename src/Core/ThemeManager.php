@@ -57,7 +57,8 @@ class ThemeManager
         'version' => 'Version',
         'license' => 'License',
         'license_uri' => 'License URI',
-        'text_domain' => 'Text Domain'
+        'text_domain' => 'Text Domain',
+        'domain_path' => 'Domain Path',
     ];
 
     /**
@@ -152,7 +153,7 @@ class ThemeManager
      */
     public function getPath(string $path = '')
     {
-        return get_template_directory().($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->dirPath.($path ? DIRECTORY_SEPARATOR.$path : $path);
     }
 
     /**
@@ -170,10 +171,10 @@ class ThemeManager
                 get_home_url(),
                 CONTENT_DIR,
                 $this->getDirectory()
-            ).($path ? DIRECTORY_SEPARATOR.$path : $path);
+            ).($path ? '/'.$path : $path);
         }
 
-        return get_template_directory_uri().($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return get_template_directory_uri().($path ? '/'.$path : $path);
     }
 
     /**
@@ -181,7 +182,7 @@ class ThemeManager
      */
     protected function setThemeDirectory()
     {
-        $pos = strrpos($this->dirPath, '/');
+        $pos = strrpos($this->dirPath, DIRECTORY_SEPARATOR);
 
         $this->directory = substr($this->dirPath, $pos + 1);
     }
@@ -230,6 +231,8 @@ class ThemeManager
      *
      * @param array $paths
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return $this
      */
     public function views(array $paths = [])
@@ -245,9 +248,19 @@ class ThemeManager
         $factory = $this->app->make('view');
         $twigLoader = $this->app->make('twig.loader');
 
-        foreach ($paths as $path) {
-            $uri = $this->dirPath.'/'.trim($path, '\/');
-            $factory->addLocation($uri);
+        foreach ($paths as $path => $priority) {
+            if (is_numeric($path)) {
+                $location = $priority;
+
+                // Set a default base priority for themes
+                // that do not define one.
+                $priority = 100;
+            } else {
+                $location = $path;
+            }
+
+            $uri = $this->dirPath.'/'.trim($location, '\/');
+            $factory->getFinder()->addOrderedLocation($uri, $priority);
             $twigLoader->addPath($uri);
         }
 
@@ -262,7 +275,10 @@ class ThemeManager
         $this->parsedHeaders = $this->headers($this->dirPath.'/style.css', $this->headers);
 
         // Theme text domain.
-        $textdomain = $this->parsedHeaders['text_domain'] ?? 'themosis_theme';
+        $textdomain = (isset($this->parsedHeaders['text_domain']) && ! empty($this->parsedHeaders['text_domain']))
+            ? $this->parsedHeaders['text_domain']
+            : 'themosis_theme';
+
         defined('THEME_TD') ? THEME_TD : define('THEME_TD', $textdomain);
     }
 

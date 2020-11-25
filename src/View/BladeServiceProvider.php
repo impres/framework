@@ -22,8 +22,28 @@ class BladeServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        Blade::directive('wpcan', function ($expression) {
+            return "<?php if( User::current()->can({$expression}) ): ?>";
+        });
+
+        Blade::directive('endwpcan', function () {
+            return '<?php endif; ?>';
+        });
+
+        Blade::directive('endloggedin', function () {
+            return '<?php endif; ?>';
+        });
+
+        Blade::directive('endloggedout', function () {
+            return '<?php endif; ?>';
+        });
+
         Blade::directive('endloop', function () {
             return '<?php }} ?>';
+        });
+
+        Blade::directive('endrole', function () {
+            return '<?php endif; ?>';
         });
 
         Blade::directive('endquery', function () {
@@ -38,8 +58,20 @@ class BladeServiceProvider extends ServiceProvider
             return '<?php wp_head(); ?>';
         });
 
+        Blade::directive('loggedin', function () {
+            return '<?php if( is_user_logged_in() ): ?>';
+        });
+
+        Blade::directive('loggedout', function () {
+            return '<?php if( !is_user_logged_in() ): ?>';
+        });
+
         Blade::directive('loop', function () {
             return '<?php if (have_posts()) { while (have_posts()) { the_post(); ?>';
+        });
+
+        Blade::directive('role', function ($expression) {
+            return "<?php if (User::current()->hasRole({$expression})): ?>";
         });
 
         Blade::directive('query', function ($expression) {
@@ -85,7 +117,7 @@ class BladeServiceProvider extends ServiceProvider
             // Set the view data if defined.
             $data = 3 === count($args) ? array_pop($args) : '[]';
 
-            return "<?php if (\$__env->exists('{$path}')) { echo \$__env->make('{$path}', {$data}, array_except(get_defined_vars(), array('__data', '__path')))->render(); } else { echo \$__env->make('{$args[0]}', {$data}, array_except(get_defined_vars(), array('__data', '__path')))->render(); } ?>";
+            return "<?php if (\$__env->exists('{$path}')) { echo \$__env->make('{$path}', {$data}, \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); } else { echo \$__env->make('{$args[0]}', {$data}, \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); } ?>";
         });
 
         Blade::directive('wp_footer', function () {

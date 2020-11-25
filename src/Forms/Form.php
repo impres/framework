@@ -17,6 +17,7 @@ use Themosis\Forms\Contracts\DataTransformerInterface;
 use Themosis\Forms\Contracts\FieldsRepositoryInterface;
 use Themosis\Forms\Contracts\FieldTypeInterface;
 use Themosis\Forms\Contracts\FormInterface;
+use Themosis\Forms\DataMappers\DataMapperManager;
 use Themosis\Forms\Fields\Types\BaseType;
 use Themosis\Forms\Resources\Factory as TransformerFactory;
 use Themosis\Html\HtmlBuilder;
@@ -30,6 +31,18 @@ use Themosis\Support\Contracts\SectionInterface;
 class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
 {
     use FormHelper;
+
+    /**
+     * DTO object.
+     *
+     * @var mixed
+     */
+    protected $dataClass;
+
+    /**
+     * @var DataMapperManager
+     */
+    protected $dataMapper;
 
     /**
      * @var string
@@ -91,6 +104,8 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
      */
     protected $allowedOptions = [
         'attributes',
+        'container_attr',
+        'csrf',
         'errors',
         'flush',
         'nonce',
@@ -107,6 +122,8 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
      */
     protected $defaultOptions = [
         'attributes' => [],
+        'container_attr' => [],
+        'csrf' => true,
         'flush' => true,
         'tags' => true,
         'errors' => true,
@@ -160,15 +177,26 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
      */
     protected $component;
 
+    /**
+     * Form view data.
+     *
+     * @var array
+     */
+    private $data = [];
+
     public function __construct(
+        $dataClass,
         FieldsRepositoryInterface $repository,
         ValidationFactoryInterface $validation,
-        ViewFactoryInterface $viewer
+        ViewFactoryInterface $viewer,
+        DataMapperManager $dataMapper
     ) {
         parent::__construct();
+        $this->dataClass = $dataClass;
         $this->repository = $repository;
         $this->validation = $validation;
         $this->viewer = $viewer;
+        $this->dataMapper = $dataMapper;
 
         /** @var Factory $validation */
         $this->setLocale($validation->getTranslator()->getLocale());
@@ -274,21 +302,37 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
         $data = $this->validator->valid();
 
         // Attach the errors message bag to each field.
+        // Set each field value.
+        // Update the DTO instance with form data if defined.
         array_walk($fields, function ($field) use ($data) {
             /** @var $field BaseType */
             $field->setErrorMessageBag($this->errors());
 
+            // Set the field value. Each field has its own data transformer so when we
+            // call the field getValue() method later on, we're sure to fetch a correct
+            // formatted value.
+            $field->setValue(Arr::get($data, $field->getName()));
+
+            // DTO
+            if (! is_null($this->dataClass) && is_object($this->dataClass) && $field->getOption('mapped')) {
+                $this->dataMapper->mapFromFieldToObject($field, $this->dataClass);
+            }
+
             // By default, if the form is not valid, we keep populating fields values.
             // In the case of a valid form, by default, values are flushed except if
             // the "flush" option for the form has been set to true.
-            if ($this->validator->fails() || false === $this->getOption('flush')) {
-                $field->setValue(Arr::get($data, $field->getName()));
+            if ($this->validator->fails()) {
                 if ($field->error()) {
                     // Add invalid CSS classes.
                     $field->addAttribute('class', 'is-invalid');
                 } else {
                     // Add valid CSS classes and validate the field.
                     $field->addAttribute('class', 'is-valid');
+                }
+            } else {
+                // Validation is successful, we can flush fields value at output.
+                if ($this->getOption('flush', false)) {
+                    $field['flush'] = true;
                 }
             }
         });
@@ -452,9 +496,28 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
         // Only provide the form instance
         // to its view under the private
         // variable "$__form".
-        return [
+        return array_merge($this->data, [
             '__form' => $this
-        ];
+        ]);
+    }
+
+    /**
+     * Pass custom data to the form view.
+     *
+     * @param array|string $key
+     * @param null         $value
+     *
+     * @return FieldTypeInterface
+     */
+    public function with($key, $value = null): FieldTypeInterface
+    {
+        if (is_array($key)) {
+            $this->data = array_merge($this->data, $key);
+        } else {
+            $this->data[$key] = $value;
+        }
+
+        return $this;
     }
 
     /**
@@ -928,5 +991,30 @@ class Form extends HtmlBuilder implements FormInterface, FieldTypeInterface
     public function getComponent(): string
     {
         return $this->component;
+    }
+
+    /**
+     * Return form HTML element open tag.
+     *
+     * @return string
+     */
+    public function open(): string
+    {
+        return $this->getOption('tags')
+            ? sprintf(
+                '<form %s>',
+                $this->attributes($this->getAttributes())
+            )
+            : '';
+    }
+
+    /**
+     * Return form HTML element close tag.
+     *
+     * @return string
+     */
+    public function close(): string
+    {
+        return $this->getOption('tags') ? '</form>' : '';
     }
 }

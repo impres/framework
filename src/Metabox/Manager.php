@@ -9,6 +9,8 @@ use Illuminate\Validation\Validator;
 use Themosis\Forms\Contracts\FieldTypeInterface;
 use Themosis\Forms\Fields\Contracts\CanHandleMetabox;
 use Themosis\Forms\Fields\Types\BaseType;
+use Themosis\Metabox\Contracts\MetaboxInterface;
+use Themosis\Metabox\Contracts\MetaboxManagerInterface;
 
 class Manager implements MetaboxManagerInterface
 {
@@ -76,7 +78,9 @@ class Manager implements MetaboxManagerInterface
                 $value = isset($validatedData[$field->getName()]) ? $validatedData[$field->getName()] : null;
                 $field->metaboxSave($value, $post_id);
             } else {
-                throw new MetaboxException('Unable to save ['.$field->getName().']. The [metabox] method is missing.');
+                throw new MetaboxException(
+                    'Unable to save ['.$field->getName().']. The [metaboxSave] method is missing.'
+                );
             }
         }
 

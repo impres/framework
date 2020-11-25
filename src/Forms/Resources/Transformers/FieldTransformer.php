@@ -15,8 +15,10 @@ class FieldTransformer extends TransformerAbstract
         'data',
         'data_type',
         'errors',
+        'flush',
         'label',
         'label_attr',
+        'mapped',
         'messages',
         'placeholder',
         'rules',
@@ -49,7 +51,7 @@ class FieldTransformer extends TransformerAbstract
             'type' => $field->getType(),
             'validation' => [
                 'errors' => $field->getOption('errors', true),
-                'messages' => $field->errors()->toArray(),
+                'messages' => $field->error(),
                 'placeholder' => $field->getOption('placeholder'),
                 'rules' => $field->getOption('rules', '')
             ],

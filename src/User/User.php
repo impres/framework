@@ -2,9 +2,9 @@
 
 namespace Themosis\User;
 
-use WP_User;
+use Themosis\User\Exceptions\UserException;
 
-class User extends WP_User
+class User extends \WP_User
 {
     /**
      * Check if the user has role.
@@ -15,7 +15,7 @@ class User extends WP_User
      */
     public function hasRole($role)
     {
-        return in_array($role, $this->roles);
+        return $this->has_cap($role);
     }
 
     /**
@@ -23,9 +23,9 @@ class User extends WP_User
      *
      * @param string $role
      *
-     * @return \Themosis\User\User
+     * @return User
      */
-    public function setRole($role)
+    public function setRole($role): User
     {
         $this->set_role($role);
 
@@ -41,24 +41,53 @@ class User extends WP_User
      */
     public function can($cap)
     {
-        return user_can($this, $cap);
+        return $this->has_cap(...func_get_args());
     }
 
     /**
-     * Update the user properties.
+     * Update user properties.
      *
-     * @param array $userdata
+     * @param array $data
      *
-     * @return \Themosis\User\User|\WP_Error
+     * @throws UserException
+     *
+     * @return User
      */
-    public function update(array $userdata)
+    public function update(array $data): User
     {
-        $userdata = array_merge($userdata, ['ID' => $this->ID]);
+        $user = wp_update_user(array_merge($data, [
+            'ID' => $this->ID
+        ]));
 
-        $user = wp_update_user($userdata);
+        if (is_a($user, 'WP_Error')) {
+            throw new UserException($user->get_error_message());
+        }
 
-        if (is_wp_error($user)) {
-            return $user;
+        return $this;
+    }
+
+    /**
+     * Update single user meta data.
+     *
+     * @param string $key
+     * @param string $value
+     *
+     * @throws UserException
+     *
+     * @return User
+     */
+    public function updateMetaData(string $key, string $value): User
+    {
+        $previous = get_user_meta($this->ID, $key, true);
+
+        if ($previous === $value) {
+            return $this;
+        }
+
+        $update = update_user_meta($this->ID, $key, $value, $previous);
+
+        if (false === $update) {
+            throw new UserException("Cannot update user meta data with a key of [$key]");
         }
 
         return $this;

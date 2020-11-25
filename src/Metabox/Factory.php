@@ -5,6 +5,7 @@ namespace Themosis\Metabox;
 use Themosis\Core\Application;
 use Themosis\Forms\Fields\FieldsRepository;
 use Themosis\Hook\IHook;
+use Themosis\Metabox\Contracts\MetaboxInterface;
 use Themosis\Metabox\Resources\MetaboxResourceInterface;
 
 class Factory
@@ -72,8 +73,6 @@ class Factory
 
         if (! $this->container->bound($abstract)) {
             $this->container->instance($abstract, $metabox);
-        } else {
-            throw new MetaboxException('The metabox with an ID of ['.$id.'] is already bound.');
         }
 
         return $metabox;

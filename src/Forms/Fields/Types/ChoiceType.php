@@ -8,10 +8,19 @@ use Themosis\Forms\Contracts\SelectableInterface;
 use Themosis\Forms\Fields\ChoiceList\ChoiceList;
 use Themosis\Forms\Fields\ChoiceList\ChoiceListInterface;
 use Themosis\Forms\Fields\Contracts\CanHandleMetabox;
+use Themosis\Forms\Fields\Contracts\CanHandlePageSettings;
+use Themosis\Forms\Fields\Contracts\CanHandleTerms;
+use Themosis\Forms\Fields\Contracts\CanHandleUsers;
 use Themosis\Forms\Resources\Transformers\ChoiceFieldTransformer;
 use Themosis\Forms\Transformers\ChoiceToValueTransformer;
 
-class ChoiceType extends BaseType implements CheckableInterface, SelectableInterface, CanHandleMetabox
+class ChoiceType extends BaseType implements
+    CheckableInterface,
+    SelectableInterface,
+    CanHandleMetabox,
+    CanHandlePageSettings,
+    CanHandleTerms,
+    CanHandleUsers
 {
     /**
      * Field layout.
@@ -222,10 +231,10 @@ class ChoiceType extends BaseType implements CheckableInterface, SelectableInter
 
         if (! $this->getOption('multiple', false)) {
             // Store single value.
-            $this->saveSingleValue($this->getValue(), $post_id);
+            $this->saveSingleValue($this->getRawValue(), $post_id);
         } else {
             // Store multiple values.
-            $this->saveMultipleValue($this->getValue(), $post_id);
+            $this->saveMultipleValue($this->getRawValue(), $post_id);
         }
     }
 
@@ -281,9 +290,180 @@ class ChoiceType extends BaseType implements CheckableInterface, SelectableInter
         } else {
             delete_post_meta($post_id, $this->getName());
 
-            array_walk($value, function ($val) use ($post_id, $previous) {
+            array_walk($value, function ($val) use ($post_id) {
                 add_post_meta($post_id, $this->getName(), $val, false);
             });
         }
+    }
+
+    /**
+     * Handle field term meta registration.
+     *
+     * @param string|array $value
+     * @param int          $term_id
+     */
+    public function termSave($value, int $term_id)
+    {
+        $this->setValue($value);
+
+        if (! $this->getOption('multiple', false)) {
+            $this->saveTermSingleValue($this->getRawValue(), $term_id);
+        } else {
+            $this->saveTermMultipleValue($this->getRawValue(), $term_id);
+        }
+    }
+
+    /**
+     * Handle field single term meta registration.
+     *
+     * @param string $value
+     * @param int    $term_id
+     */
+    protected function saveTermSingleValue($value, int $term_id)
+    {
+        $previous = get_term_meta($term_id, $this->getName(), true);
+
+        if (is_null($value) || empty($value)) {
+            delete_term_meta($term_id, $this->getName());
+        } elseif (empty($previous)) {
+            add_term_meta($term_id, $this->getName(), $value, true);
+        } else {
+            update_term_meta($term_id, $this->getName(), $value, $previous);
+        }
+    }
+
+    /**
+     * Handle field multiple term meta registration.
+     *
+     * @param $value
+     * @param int $term_id
+     */
+    protected function saveTermMultipleValue($value, int $term_id)
+    {
+        $previous = get_term_meta($term_id, $this->getName(), false);
+
+        if (is_null($value) || empty($value)) {
+            delete_term_meta($term_id, $this->getName());
+        } elseif (empty($previous) && is_array($value)) {
+            array_walk($value, function ($val) use ($term_id) {
+                add_term_meta($term_id, $this->getName(), $val, false);
+            });
+        } else {
+            delete_term_meta($term_id, $this->getName());
+
+            array_walk($value, function ($val) use ($term_id) {
+                add_term_meta($term_id, $this->getName(), $val, false);
+            });
+        }
+    }
+
+    /**
+     * Handle field term meta initial value.
+     *
+     * @param int $term_id
+     */
+    public function termGet(int $term_id)
+    {
+        $value = get_term_meta($term_id, $this->getName(), ! $this->getOption('multiple', false));
+
+        if (! empty($value)) {
+            $this->setValue($value);
+        }
+    }
+
+    /**
+     * Handle field user meta initial value.
+     *
+     * @param int $user_id
+     */
+    public function userGet(int $user_id)
+    {
+        $value = get_user_meta($user_id, $this->getName(), ! $this->getOption('multiple', false));
+
+        if (! empty($value)) {
+            $this->setValue($value);
+        }
+    }
+
+    /**
+     * Handle field user meta registration.
+     *
+     * @param array|string $value
+     * @param int          $user_id
+     */
+    public function userSave($value, int $user_id)
+    {
+        $this->setValue($value);
+
+        if (! $this->getOption('multiple', false)) {
+            $this->saveUserSingleValue($this->getRawValue(), $user_id);
+        } else {
+            $this->saveUserMultipleValue($this->getRawValue(), $user_id);
+        }
+    }
+
+    /**
+     * Handle field user meta single data registration.
+     *
+     * @param string $value
+     * @param int    $user_id
+     */
+    protected function saveUserSingleValue($value, int $user_id)
+    {
+        $previous = get_user_meta($user_id, $this->getName(), true);
+
+        if (is_null($value) || empty($value)) {
+            delete_user_meta($user_id, $this->getName());
+        } elseif (empty($previous)) {
+            add_user_meta($user_id, $this->getName(), $value, true);
+        } else {
+            update_user_meta($user_id, $this->getName(), $value, $previous);
+        }
+    }
+
+    /**
+     * Handle field user meta multiple data registration.
+     *
+     * @param array $value
+     * @param int   $user_id
+     */
+    protected function saveUserMultipleValue($value, int $user_id)
+    {
+        $previous = get_user_meta($user_id, $this->getName(), false);
+
+        if (is_null($value) || empty($value)) {
+            delete_user_meta($user_id, $this->getName());
+        } elseif (empty($previous) && is_array($value)) {
+            array_walk($value, function ($val) use ($user_id) {
+                add_user_meta($user_id, $this->getName(), $val, false);
+            });
+        } else {
+            delete_user_meta($user_id, $this->getName());
+
+            array_walk($value, function ($val) use ($user_id) {
+                add_user_meta($user_id, $this->getName(), $val, false);
+            });
+        }
+    }
+
+    /**
+     * Save the field setting value.
+     *
+     * @param mixed  $value
+     * @param string $name
+     */
+    public function settingSave($value, string $name)
+    {
+        //
+    }
+
+    /**
+     * Return the field setting value.
+     *
+     * @return mixed|void
+     */
+    public function settingGet()
+    {
+        //
     }
 }

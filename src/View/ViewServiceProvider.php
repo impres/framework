@@ -6,6 +6,9 @@ use Illuminate\View\Factory;
 use Illuminate\View\ViewServiceProvider as IlluminateViewServiceProvider;
 use Themosis\View\Engines\Twig;
 use Themosis\View\Extensions\WordPress;
+use Twig\Environment;
+use Twig\Extension\DebugExtension;
+use Twig\Loader\FilesystemLoader;
 
 class ViewServiceProvider extends IlluminateViewServiceProvider
 {
@@ -21,12 +24,22 @@ class ViewServiceProvider extends IlluminateViewServiceProvider
     }
 
     /**
+     * Register Themosis view finder.
+     */
+    public function registerViewFinder()
+    {
+        $this->app->singleton('view.finder', function ($app) {
+            return new FileViewFinder($app['files'], $app['config']['view.paths']);
+        });
+    }
+
+    /**
      * Register Twig Loader.
      */
     public function registerTwigLoader()
     {
         $this->app->singleton('twig.loader', function ($app) {
-            return new \Twig_Loader_Filesystem($app['view.finder']->getPaths());
+            return new FilesystemLoader($app['view.finder']->getPaths());
         });
     }
 
@@ -36,7 +49,7 @@ class ViewServiceProvider extends IlluminateViewServiceProvider
     public function registerTwigEnvironment()
     {
         $this->app->singleton('twig', function ($app) {
-            $twig = new \Twig_Environment(
+            $twig = new Environment(
                 $app['twig.loader'],
                 [
                     'auto_reload' => true,
@@ -45,7 +58,7 @@ class ViewServiceProvider extends IlluminateViewServiceProvider
             );
 
             // Add Twig Debug Extension
-            $twig->addExtension(new \Twig_Extension_Debug());
+            $twig->addExtension(new DebugExtension());
 
             // Enable debug.
             if ($app['config']['app.debug']) {

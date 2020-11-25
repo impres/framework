@@ -11,10 +11,10 @@
                         $selected = $field->selected(function ($option, $value) {
                             $values = (array) $value;
 
-                            return ! is_null($value) && in_array($option, $values, true) ? 'selected' : '';
+                            return ! empty($values) && in_array($option, $values) ? 'selected="selected"' : '';
                         }, [$choice, $field->getValue()]);
                     ?>
-                    <option value="{{ $choice }}" {{ $selected }}>{{ $label }}</option>
+                    <option value="{{ $choice }}" {!! $selected !!}>{{ $label }}</option>
                 @endforeach
             </optgroup>
         @else
@@ -22,10 +22,10 @@
                 $selected = $field->selected(function ($option, $value) {
                     $values = (array) $value;
 
-                    return ! is_null($value) && in_array($option, $values, true) ? 'selected' : '';
+                    return ! empty($values) && in_array($option, $values) ? 'selected="selected"' : '';
                 }, [$choices, $field->getValue()]);
             ?>
-            <option value="{{ $choices }}" {{ $selected }}>{{ $group }}</option>
+            <option value="{{ $choices }}" {!! $selected !!}>{{ $group }}</option>
         @endif
     @endforeach
 </select>

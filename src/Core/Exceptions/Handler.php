@@ -79,11 +79,11 @@ class Handler implements ExceptionHandler
     /**
      * Report or log an exception.
      *
-     * @param \Exception $e
+     * @param \Throwable $e
      *
      * @throws Exception
      */
-    public function report(Exception $e)
+    public function report(Throwable $e)
     {
         if ($this->shouldntReport($e)) {
             return;
@@ -114,13 +114,13 @@ class Handler implements ExceptionHandler
      * Render an exception into an HTTP response.
      *
      * @param \Illuminate\Http\Request $request
-     * @param \Exception               $e
+     * @param \Throwable               $e
      *
      * @throws \Illuminate\Container\EntryNotFoundException
      *
      * @return \Symfony\Component\HttpFoundation\Response
      */
-    public function render($request, Exception $e)
+    public function render($request, Throwable $e)
     {
         if (method_exists($e, 'render') && $response = $e->render($request)) {
             return Router::toResponse($request, $response);
@@ -147,21 +147,21 @@ class Handler implements ExceptionHandler
      * Render an exception to the console.
      *
      * @param \Symfony\Component\Console\Output\OutputInterface $output
-     * @param \Exception                                        $e
+     * @param \Throwable                                        $e
      */
-    public function renderForConsole($output, Exception $e)
+    public function renderForConsole($output, Throwable $e)
     {
-        (new ConsoleApplication())->renderException($e, $output);
+        (new ConsoleApplication())->renderThrowable($e, $output);
     }
 
     /**
      * Prepare exception for rendering.
      *
-     * @param Exception $e
+     * @param Throwable $e
      *
      * @return Exception
      */
-    protected function prepareException(Exception $e)
+    protected function prepareException(Throwable $e)
     {
         if ($e instanceof ModelNotFoundException) {
             $e = new NotFoundHttpException($e->getMessage(), $e);
@@ -180,13 +180,15 @@ class Handler implements ExceptionHandler
      * @param Request                 $request
      * @param AuthenticationException $e
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return Response
      */
     protected function unauthenticated($request, AuthenticationException $e)
     {
         return $request->expectsJson()
             ? response()->json(['message' => $e->getMessage()], 401)
-            : redirect()->guest(route('/'));
+            : redirect()->guest($e->redirectTo() ?? route('login'));
     }
 
     /**
@@ -194,6 +196,8 @@ class Handler implements ExceptionHandler
      *
      * @param ValidationException $e
      * @param Request             $request
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
      *
      * @return SymfonyResponse
      */
@@ -212,17 +216,15 @@ class Handler implements ExceptionHandler
      * Convert a validation exception into a response.
      *
      * @param Request             $request
-     * @param ValidationException $e
+     * @param ValidationException $exception
      *
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Routing\Redirector
      */
-    protected function invalid($request, ValidationException $e)
+    protected function invalid($request, ValidationException $exception)
     {
-        $url = $e->redirectTo ?? url()->previous();
-
-        return redirect($url)
-            ->withInput($request->except($this->dontFlash))
-            ->withErrors($e->errors(), $e->errorBag);
+        return redirect($exception->redirectTo ?? url()->previous())
+            ->withInput(Arr::except($request->input(), $this->dontFlash))
+            ->withErrors($exception->errors(), $exception->errorBag);
     }
 
     /**
@@ -230,6 +232,8 @@ class Handler implements ExceptionHandler
      *
      * @param Request             $request
      * @param ValidationException $e
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
      *
      * @return JsonResponse
      */
@@ -244,11 +248,11 @@ class Handler implements ExceptionHandler
     /**
      * Determine if the exception handler should be reported.
      *
-     * @param Exception $e
+     * @param Throwable $e
      *
      * @return bool
      */
-    public function shouldReport(Exception $e)
+    public function shouldReport(Throwable $e)
     {
         return ! $this->shouldntReport($e);
     }
@@ -256,11 +260,11 @@ class Handler implements ExceptionHandler
     /**
      * Determine if the exception is in the "do not report" list.
      *
-     * @param Exception $e
+     * @param Throwable $e
      *
      * @return bool
      */
-    protected function shouldntReport(Exception $e)
+    protected function shouldntReport(Throwable $e)
     {
         $dontReport = array_merge($this->dontReport, $this->internalDontReport);
 
@@ -279,7 +283,7 @@ class Handler implements ExceptionHandler
      *
      * @return JsonResponse
      */
-    protected function prepareJsonResponse($request, Exception $e)
+    protected function prepareJsonResponse($request, Throwable $e)
     {
         $status = $this->isHttpException($e) ? $e->getStatusCode() : 500;
         $headers = $this->isHttpException($e) ? $e->getHeaders() : [];
@@ -485,7 +489,7 @@ class Handler implements ExceptionHandler
     {
         $status = $e->getStatusCode();
 
-        $paths = collect(config('view.paths'));
+        $paths = collect(view()->getFinder()->getPaths());
 
         view()->replaceNamespace('errors', $paths->map(function ($path) {
             return "{$path}/errors";

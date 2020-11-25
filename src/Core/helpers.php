@@ -1,16 +1,56 @@
 <?php
 
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
+use Illuminate\Contracts\Broadcasting\Factory as BroadcastFactory;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Contracts\Routing\UrlGenerator;
+use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Contracts\Validation\Factory as ValidationFactory;
 use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Database\Eloquent\Factory as EloquentFactory;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Log\LogManager;
+use Illuminate\Queue\SerializableClosure;
 use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\HtmlString;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Debug\Exception\FatalThrowableError;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Themosis\Core\Bus\PendingDispatch;
+use Themosis\Core\Mix;
+use Themosis\Queue\CallQueuedClosure;
+
+if (! function_exists('abort')) {
+    /**
+     * Throw an HttpException with the given data.
+     *
+     * @param Response|Responsable|int $code
+     * @param string                   $message
+     * @param array                    $headers
+     *
+     * @throws HttpResponseException
+     * @throws HttpException
+     * @throws NotFoundHttpException
+     */
+    function abort($code, $message = '', array $headers = [])
+    {
+        if ($code instanceof Response) {
+            throw new HttpResponseException($code);
+        } elseif ($code instanceof Responsable) {
+            throw new HttpResponseException($code->toResponse(\request()));
+        }
+
+        app()->abort($code, $message, $headers);
+    }
+}
 
 if (! function_exists('app')) {
     /**
@@ -18,6 +58,8 @@ if (! function_exists('app')) {
      *
      * @param string $abstract
      * @param array  $parameters
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
      *
      * @return mixed|\Themosis\Core\Application
      */
@@ -37,11 +79,68 @@ if (! function_exists('app_path')) {
      *
      * @param string $path
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return string
      */
     function app_path($path = '')
     {
         return app()->path($path);
+    }
+}
+
+if (! function_exists('asset')) {
+    /**
+     * Generate an asset path for the application.
+     *
+     * @param string $path
+     * @param bool   $secure
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
+     * @return string
+     */
+    function asset($path, $secure = null)
+    {
+        return app('url')->asset($path, $secure);
+    }
+}
+
+if (! function_exists('auth')) {
+    /**
+     * Get the available auth instance.
+     *
+     * @param string|null $guard
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
+     * @return \Illuminate\Contracts\Auth\Factory|\Illuminate\Contracts\Auth\Guard
+     */
+    function auth($guard = null)
+    {
+        if (is_null($guard)) {
+            return app(AuthFactory::class);
+        }
+
+        return app(AuthFactory::class)->guard($guard);
+    }
+}
+
+if (! function_exists('back')) {
+    /**
+     * Create a redirect response to the previous location.
+     *
+     * @param int   $status
+     * @param array $headers
+     * @param mixed $fallback
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    function back($status = 302, $headers = [], $fallback = false)
+    {
+        return app('redirect')->back($status, $headers, $fallback);
     }
 }
 
@@ -51,11 +150,85 @@ if (! function_exists('base_path')) {
      *
      * @param string $path
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return string
      */
     function base_path($path = '')
     {
         return app()->basePath($path);
+    }
+}
+
+if (! function_exists('broadcast')) {
+    /**
+     * Begin broadcasting an event.
+     *
+     * @param null $event
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
+     * @return \Illuminate\Broadcasting\PendingBroadcast
+     */
+    function broadcast($event = null)
+    {
+        return app(BroadcastFactory::class)->event($event);
+    }
+}
+
+if (! function_exists('public_path')) {
+    /**
+     * Get the path to the public folder.
+     *
+     * @param string $path
+     *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
+     * @return string
+     */
+    function public_path($path = '')
+    {
+        return app()->make('path.public').($path ? DIRECTORY_SEPARATOR.ltrim($path, DIRECTORY_SEPARATOR) : $path);
+    }
+}
+
+if (! function_exists('cache')) {
+    /**
+     * Get / set the specified cache value.
+     *
+     * If an array is passed, we'll assume you want to put to the cache.
+     *
+     * @param  dynamic  key|key,default|data,expiration|null
+     *
+     * @throws \Exception
+     *
+     * @return mixed|\Illuminate\Cache\CacheManager
+     */
+    function cache()
+    {
+        $arguments = func_get_args();
+
+        if (empty($arguments)) {
+            return app('cache');
+        }
+
+        if (is_string($arguments[0])) {
+            return app('cache')->get(...$arguments);
+        }
+
+        if (! is_array($arguments[0])) {
+            throw new Exception(
+                'When setting a value in the cache, you must pass an array of key / value pairs.'
+            );
+        }
+
+        if (! isset($arguments[1])) {
+            throw new Exception(
+                'You must specify an expiration time when setting a value in the cache.'
+            );
+        }
+
+        return app('cache')->put(key($arguments[0]), reset($arguments[0]), $arguments[1]);
     }
 }
 
@@ -114,6 +287,36 @@ if (! function_exists('content_path')) {
     }
 }
 
+if (! function_exists('csrf_field')) {
+    /**
+     * Generate a CSRF token form field.
+     *
+     * @return HtmlString
+     */
+    function csrf_field()
+    {
+        return new HtmlString('<input type="hidden" name="_token" value="'.csrf_token().'">');
+    }
+}
+
+if (! function_exists('csrf_token')) {
+    /**
+     * Get the CSRF token value.
+     *
+     * @return string
+     */
+    function csrf_token()
+    {
+        $session = app('session');
+
+        if (isset($session)) {
+            return $session->token();
+        }
+
+        throw new RuntimeException('Application session store not set.');
+    }
+}
+
 if (! function_exists('database_path')) {
     /**
      * Get the database path.
@@ -128,6 +331,54 @@ if (! function_exists('database_path')) {
     }
 }
 
+if (! function_exists('decrypt')) {
+    /**
+     * Decrypt the given value.
+     *
+     * @param string $value
+     * @param bool   $unserialize
+     *
+     * @return mixed
+     */
+    function decrypt($value, $unserialize = true)
+    {
+        return app('encrypter')->decrypt($value, $unserialize);
+    }
+}
+
+if (! function_exists('dispatch')) {
+    /**
+     * Dispatch a job to its appropriate handler.
+     *
+     * @param mixed $job
+     *
+     * @return PendingDispatch
+     */
+    function dispatch($job)
+    {
+        if ($job instanceof Closure) {
+            $job = new CallQueuedClosure(new SerializableClosure($job));
+        }
+
+        return new PendingDispatch($job);
+    }
+}
+
+if (! function_exists('dispatch_now')) {
+    /**
+     * Dispatch a command to its appropriate handler in the current process.
+     *
+     * @param mixed $job
+     * @param null  $handler
+     *
+     * @return mixed
+     */
+    function dispatch_now($job, $handler = null)
+    {
+        return app(Dispatcher::class)->dispatchNow($job, $handler);
+    }
+}
+
 if (! function_exists('dummy_path')) {
     /**
      * Get dummy path.
@@ -139,6 +390,156 @@ if (! function_exists('dummy_path')) {
     function dummy_path($path = '')
     {
         return '';
+    }
+}
+
+if (! function_exists('encrypt')) {
+    /**
+     * Encrypt the given value.
+     *
+     * @param mixed $value
+     * @param bool  $serialize
+     *
+     * @return string
+     */
+    function encrypt($value, $serialize = true)
+    {
+        return app('encrypter')->encrypt($value, $serialize);
+    }
+}
+
+if (! function_exists('event')) {
+    /**
+     * Dispatch an event and call the listeners.
+     *
+     * @param string|object $args
+     *
+     * @return array|null
+     */
+    function event(...$args)
+    {
+        return app('events')->dispatch(...$args);
+    }
+}
+
+if (! function_exists('factory')) {
+    /**
+     * Create a model factory builder for a given class, name, and amount.
+     *
+     * @param string class|class,name|class,amount|class,name,amount
+     *
+     * @return Illuminate\Database\Eloquent\FactoryBuilder
+     */
+    function factory()
+    {
+        $factory = app(EloquentFactory::class);
+
+        $arguments = func_get_args();
+
+        if (isset($arguments[1]) && is_string($arguments[1])) {
+            return $factory->of($arguments[0], $arguments[1])->times($arguments[2] ?? null);
+        } elseif (isset($arguments[1])) {
+            return $factory->of($arguments[0])->times($arguments[1]);
+        }
+
+        return $factory->of($arguments[0]);
+    }
+}
+
+if (! function_exists('is_subpage')) {
+    /**
+     * Determine if current WordPress condition is a sub-page (of).
+     *
+     * @param int|string|array $parent
+     *
+     * @return bool
+     */
+    function is_subpage($parent)
+    {
+        global $post;
+
+        if (is_null($post)) {
+            return false;
+        }
+
+        if (empty($parent)) {
+            if (is_page() && $post->post_parent > 0) {
+                return true;
+            }
+        } else {
+            $parentPost = get_post($post->post_parent);
+
+            if (is_numeric($parent) && is_page() && (int) $parent == $post->post_parent) {
+                return true;
+            } elseif (is_string($parent) && is_page()) {
+                if (is_a($parentPost, 'WP_Post') && $parent === $parentPost->post_name) {
+                    return true;
+                }
+            } elseif (is_array($parent) && is_page()) {
+                if (in_array($parentPost->ID, $parent, true) || in_array($parentPost->post_name, $parent, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
+if (! function_exists('load_application_textdomain')) {
+    /**
+     * Register the .mo file for the application text domain translations.
+     *
+     * @param string $domain
+     * @param string $locale
+     *
+     * @throws ErrorException
+     *
+     * @return bool
+     */
+    function load_application_textdomain(string $domain, string $locale)
+    {
+        if (! function_exists('load_textdomain')) {
+            throw new ErrorException(
+                'Function called too early. Function depends on the {load_textdomain} WordPress function.'
+            );
+        }
+
+        $path = resource_path('languages'.DS.$locale.DS.$domain.'.mo');
+
+        if (file_exists($path) && is_readable($path)) {
+            return load_textdomain($domain, $path);
+        }
+
+        return false;
+    }
+}
+
+if (! function_exists('load_themosis_plugin_textdomain')) {
+    /**
+     * Register the .mo file for any themosis plugins. Work for extensions
+     * installed inside the "plugins" and "mu-plugins" directories.
+     *
+     * @param string $domain
+     * @param string $path
+     *
+     * @return bool
+     */
+    function load_themosis_plugin_textdomain(string $domain, string $path)
+    {
+        /**
+         * Filters a plugin's locale.
+         *
+         * @since 3.0.0
+         *
+         * @param string $locale The plugin's current locale.
+         * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+         */
+        $locale = apply_filters('plugin_locale', determine_locale(), $domain);
+
+        $mofile = $domain.'-'.$locale.'.mo';
+
+        return load_textdomain($domain, rtrim($path, '\/').DIRECTORY_SEPARATOR.$mofile);
     }
 }
 
@@ -175,6 +576,22 @@ if (! function_exists('logs')) {
     }
 }
 
+if (! function_exists('meta')) {
+    /**
+     * Retrieve metadata for the specified object.
+     *
+     * @param int    $object_id
+     * @param string $meta_key
+     * @param bool   $single
+     * @param string $meta_type
+     *
+     * @return mixed
+     */
+    function meta($object_id, $meta_key = '', $single = false, $meta_type = 'post')
+    {
+        return get_metadata($meta_type, $object_id, $meta_key, $single);
+    }
+}
 if (! function_exists('method_field')) {
     /**
      * Generate a form field to spoof the HTTP verb usef by forms.
@@ -189,6 +606,23 @@ if (! function_exists('method_field')) {
     }
 }
 
+if (! function_exists('mix')) {
+    /**
+     * Get the path to a versioned Mix file.
+     *
+     * @param string $path
+     * @param string $manifestDirectory
+     *
+     * @throws \Exception
+     *
+     * @return \Illuminate\Support\HtmlString|string
+     */
+    function mix($path, $manifestDirectory = '')
+    {
+        return app(Mix::class)(...func_get_args());
+    }
+}
+
 if (! function_exists('muplugins_path')) {
     /**
      * Return the mu-plugins path.
@@ -200,6 +634,20 @@ if (! function_exists('muplugins_path')) {
     function muplugins_path($path = '')
     {
         return app()->mupluginsPath($path);
+    }
+}
+
+if (! function_exists('now')) {
+    /**
+     * Create a new Carbon instance for the current time.
+     *
+     * @param \DateTimeZone|string|null $tz
+     *
+     * @return \Illuminate\Support\Carbon
+     */
+    function now($tz = null)
+    {
+        return Date::now($tz);
     }
 }
 
@@ -235,6 +683,22 @@ if (! function_exists('redirect')) {
         }
 
         return app('redirect')->to($to, $status, $headers, $secure);
+    }
+}
+
+if (! function_exists('report')) {
+    /**
+     * Report an exception.
+     *
+     * @param \Exception $exception
+     */
+    function report($exception)
+    {
+        if ($exception instanceof Throwable &&
+            ! $exception instanceof Exception) {
+            $exception = new FatalThrowableError($exception);
+        }
+        app(ExceptionHandler::class)->report($exception);
     }
 }
 
@@ -285,6 +749,8 @@ if (! function_exists('response')) {
      * @param int    $status
      * @param array  $headers
      *
+     * @throws \Illuminate\Contracts\Container\BindingResolutionException
+     *
      * @return \Symfony\Component\HttpFoundation\Response|\Illuminate\Contracts\Routing\ResponseFactory
      */
     function response($content = '', $status = 200, array $headers = [])
@@ -296,6 +762,24 @@ if (! function_exists('response')) {
         }
 
         return $factory->make($content, $status, $headers);
+    }
+}
+
+if (! function_exists('rootUrl')) {
+    /**
+     * Return an URL based on the root domain.
+     *
+     * @param string $uri
+     *
+     * @return string
+     */
+    function rootUrl(string $uri = ''): string
+    {
+        $request = app('request');
+        // ensure one slash on left, none on the right
+        $uri = ($uri) ? '/'.trim($uri, '/') : $uri;
+
+        return $request->getSchemeAndHttpHost().$uri;
     }
 }
 
@@ -311,7 +795,23 @@ if (! function_exists('route')) {
      */
     function route($name, $parameters = [], $absolute = true)
     {
-        return app('url')->route($name, $parameters, $absolute);
+        $path = app('url')->route($name, $parameters, false);
+
+        return ($absolute) ? rootUrl($path) : $path;
+    }
+}
+
+if (! function_exists('secure_asset')) {
+    /**
+     * Generate an asset path for the application.
+     *
+     * @param string $path
+     *
+     * @return string
+     */
+    function secure_asset($path)
+    {
+        return asset($path, true);
     }
 }
 
@@ -370,6 +870,43 @@ if (! function_exists('themes_path')) {
     }
 }
 
+if (! function_exists('trans')) {
+    /**
+     * Translate the given message.
+     *
+     * @param string $key
+     * @param array  $replace
+     * @param string $locale
+     *
+     * @return \Illuminate\Contracts\Translation\Translator|string|array|null
+     */
+    function trans($key = null, $replace = [], $locale = null)
+    {
+        if (is_null($key)) {
+            return app('translator');
+        }
+
+        return app('translator')->trans($key, $replace, $locale);
+    }
+}
+
+if (! function_exists('trans_choice')) {
+    /**
+     * Translates the given message based on a count.
+     *
+     * @param string               $key
+     * @param int|array|\Countable $number
+     * @param array                $replace
+     * @param string               $locale
+     *
+     * @return string
+     */
+    function trans_choice($key, $number, array $replace = [], $locale = null)
+    {
+        return app('translator')->transChoice($key, $number, $replace, $locale);
+    }
+}
+
 if (! function_exists('url')) {
     /**
      * Return a URL for the application.
@@ -422,7 +959,7 @@ if (! function_exists('view')) {
      * @param array  $data
      * @param array  $mergeData
      *
-     * @return \Illuminate\View\View|\Illuminate\Contracts\View\Factory
+     * @return \Illuminate\View\View|\Illuminate\Contracts\View\Factory|\Illuminate\View\Factory
      */
     function view($view = null, $data = [], $mergeData = [])
     {
