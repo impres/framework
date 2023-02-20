@@ -122,7 +122,7 @@ class Section implements SectionInterface, Iterator, Countable
     public function getView(bool $prefixed = false): string
     {
         if ($prefixed) {
-            return $this->getTheme().'.'.$this->view;
+            return $this->getTheme() . '.' . $this->view;
         }
 
         return $this->view;
@@ -167,7 +167,7 @@ class Section implements SectionInterface, Iterator, Countable
         // We provide a copy of the section instance
         // so we can iterate over its items from the view.
         $this->data = array_merge($data, [
-            '__section' => $this
+            '__section' => $this,
         ]);
 
         return $this;
@@ -236,7 +236,7 @@ class Section implements SectionInterface, Iterator, Countable
      *
      * @return mixed
      */
-    public function current()
+    public function current(): mixed
     {
         return $this->items[$this->position];
     }
@@ -244,7 +244,7 @@ class Section implements SectionInterface, Iterator, Countable
     /**
      * Move to the next item.
      */
-    public function next()
+    public function next(): void
     {
         ++$this->position;
     }
@@ -254,7 +254,7 @@ class Section implements SectionInterface, Iterator, Countable
      *
      * @return int
      */
-    public function key()
+    public function key(): int
     {
         return $this->position;
     }
@@ -264,7 +264,7 @@ class Section implements SectionInterface, Iterator, Countable
      *
      * @return bool
      */
-    public function valid()
+    public function valid(): bool
     {
         return isset($this->items[$this->position]);
     }
@@ -272,7 +272,7 @@ class Section implements SectionInterface, Iterator, Countable
     /**
      * Reset to start position.
      */
-    public function rewind()
+    public function rewind(): void
     {
         $this->position = 0;
     }
@@ -282,7 +282,7 @@ class Section implements SectionInterface, Iterator, Countable
      *
      * @return int
      */
-    public function count()
+    public function count(): int
     {
         return count($this->items);
     }

@@ -10,7 +10,7 @@ class FieldTransformer extends TransformerAbstract
     /**
      * @var array
      */
-    protected $excludedOptions = [
+    protected array $excludedOptions = [
         'attributes',
         'data',
         'data_type',
@@ -23,7 +23,7 @@ class FieldTransformer extends TransformerAbstract
         'placeholder',
         'rules',
         'show_in_rest',
-        'theme'
+        'theme',
     ];
 
     /**
@@ -45,7 +45,7 @@ class FieldTransformer extends TransformerAbstract
             'options' => $this->getOptions($field),
             'label' => [
                 'inner' => $field->getOption('label'),
-                'attributes' => $field->getOption('label_attr', [])
+                'attributes' => $field->getOption('label_attr', []),
             ],
             'theme' => $field->getTheme(),
             'type' => $field->getType(),
@@ -53,9 +53,9 @@ class FieldTransformer extends TransformerAbstract
                 'errors' => $field->getOption('errors', true),
                 'messages' => $field->error(),
                 'placeholder' => $field->getOption('placeholder'),
-                'rules' => $field->getOption('rules', '')
+                'rules' => $field->getOption('rules', ''),
             ],
-            'value' => 'checkbox' === $field->getType() ? $field->getRawValue() : $field->getValue(''),
+            'value' => $field->getRawValue(),
         ];
     }
 

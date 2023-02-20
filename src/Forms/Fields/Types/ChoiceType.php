@@ -63,6 +63,8 @@ class ChoiceType extends BaseType implements
 
         $this->allowedOptions = $this->setAllowedOptions();
         $this->defaultOptions = $this->setDefaultOptions();
+
+        $this->setTransformer(new ChoiceToValueTransformer());
     }
 
     /**
@@ -76,7 +78,7 @@ class ChoiceType extends BaseType implements
             'choices',
             'expanded',
             'multiple',
-            'layout'
+            'layout',
         ]);
     }
 
@@ -90,13 +92,13 @@ class ChoiceType extends BaseType implements
         $default = [
             'expanded' => false,
             'multiple' => false,
-            'choices' => null
+            'choices' => null,
         ];
 
         if (function_exists('_x')) {
             $default['l10n'] = [
                 'not_found' => _x('Nothing found', 'field', Application::TEXTDOMAIN),
-                'placeholder' => _x('Select an option...', 'field', Application::TEXTDOMAIN)
+                'placeholder' => _x('Select an option...', 'field', Application::TEXTDOMAIN),
             ];
         }
 
@@ -112,8 +114,6 @@ class ChoiceType extends BaseType implements
      */
     protected function parseOptions(array $options): array
     {
-        $this->setTransformer(new ChoiceToValueTransformer());
-
         $options = parent::parseOptions($options);
 
         if (is_null($options['choices'])) {
@@ -179,7 +179,7 @@ class ChoiceType extends BaseType implements
 
         return array_merge($options, [
             'choices' => $choices,
-            'layout' => $this->getLayout()
+            'layout' => $this->getLayout(),
         ]);
     }
 
@@ -229,12 +229,10 @@ class ChoiceType extends BaseType implements
     {
         $this->setValue($value);
 
-        if (! $this->getOption('multiple', false)) {
-            // Store single value.
-            $this->saveSingleValue($this->getRawValue(), $post_id);
+        if (is_array($this->value)) {
+            $this->saveMultipleValue($this->value, $post_id);
         } else {
-            // Store multiple values.
-            $this->saveMultipleValue($this->getRawValue(), $post_id);
+            $this->saveSingleValue($this->value, $post_id);
         }
     }
 

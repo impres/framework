@@ -8,6 +8,7 @@ use Illuminate\Contracts\Validation\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Validator;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Themosis\Forms\Contracts\FieldTypeInterface;
 use Themosis\Hook\IHook;
 use Themosis\Page\Contracts\PageInterface;
@@ -125,7 +126,7 @@ class Page implements PageInterface
         IHook $filter,
         UIContainerInterface $ui,
         SettingsRepositoryInterface $repository,
-        Factory $validator
+        Factory $validator,
     ) {
         $this->action = $action;
         $this->filter = $filter;
@@ -303,6 +304,19 @@ class Page implements PageInterface
         return $this;
     }
 
+    public function getUrl(array $queryArgs = []): string
+    {
+        return add_query_arg(
+            array_merge(
+                $queryArgs,
+                [
+                    'page' => $this->getSlug(),
+                ],
+            ),
+            admin_url('admin.php'),
+        );
+    }
+
     /**
      * Set the page for network display.
      *
@@ -407,7 +421,7 @@ class Page implements PageInterface
         }
 
         // The current page is attached to another one.
-        $abstract = 'page.'.$this->getParent();
+        $abstract = 'page.' . $this->getParent();
 
         if ($this->ui()->factory()->getContainer()->bound($abstract)) {
             // Parent hook is equivalent to the page menu as lowercase.
@@ -433,7 +447,7 @@ class Page implements PageInterface
                 $this->getSlug(),
                 [$this, 'render'],
                 $this->getIcon(),
-                $this->getPosition()
+                $this->getPosition(),
             );
         } else {
             // Add a submenu page.
@@ -443,7 +457,7 @@ class Page implements PageInterface
                 $this->getMenu(),
                 $this->getCapability(),
                 $this->getSlug(),
-                [$this, 'render']
+                [$this, 'render'],
             );
         }
     }
@@ -454,7 +468,7 @@ class Page implements PageInterface
     public function render()
     {
         echo $this->ui()->getView()->with([
-            '__page' => $this
+            '__page' => $this,
         ])->render();
     }
 
@@ -504,7 +518,7 @@ class Page implements PageInterface
     {
         $sections = array_merge(
             $this->repository()->getSections()->all(),
-            $sections
+            $sections,
         );
 
         array_walk($sections, function ($section) {
@@ -611,7 +625,7 @@ class Page implements PageInterface
                     [$this, 'renderSettings'],
                     $this->getSlug(),
                     $slug,
-                    $setting
+                    $setting,
                 );
 
                 // Validate setting.
@@ -625,7 +639,7 @@ class Page implements PageInterface
                     'sanitize_callback' => [$this, 'sanitizeSetting'],
                     'default' => $setting->getOption('data', ''),
                     'show_in_rest' => $showInRest,
-                    'type' => $setting->getOption('data_type', 'string')
+                    'type' => $setting->getOption('data_type', 'string'),
                 ]);
             }
         }
@@ -648,11 +662,11 @@ class Page implements PageInterface
         $setting->setPrefix($this->getPrefix());
         $setting->setOptions([
             'label' => $setting->getOption('label', ucfirst($setting->getBaseName())),
-            'placeholder' => $setting->getOption('placeholder', $setting->getBaseName())
+            'placeholder' => $setting->getOption('placeholder', $setting->getBaseName()),
         ]);
 
         $attributes = array_merge([
-            'class' => 'regular-text'
+            'class' => 'regular-text',
         ], $setting->getAttributes());
         $setting->setAttributes($attributes);
 
@@ -664,7 +678,7 @@ class Page implements PageInterface
      *
      * @param string|array $value
      *
-     * @return string|array
+     * @return string|array|null
      */
     public function sanitizeSetting($value)
     {
@@ -679,7 +693,7 @@ class Page implements PageInterface
 
         if ($this->offset > $keys->count() - 1) {
             if (empty($value)) {
-                return '';
+                return null;
             }
 
             // Sanitize is called one more time with a valid value.
@@ -688,7 +702,7 @@ class Page implements PageInterface
             $settingName = $data->search($value, true);
 
             if (! $settingName) {
-                return '';
+                return null;
             }
 
             // Let's add a "fake" error to avoid duplicate success messages.
@@ -701,7 +715,7 @@ class Page implements PageInterface
             $data->all(),
             [$setting->getName() => $setting->getOption('rules')],
             $this->getSettingMessages($setting),
-            $this->getSettingPlaceholder($setting)
+            $this->getSettingPlaceholder($setting),
         );
 
         // Update setting offset.
@@ -714,17 +728,23 @@ class Page implements PageInterface
             $this->addSettingsErrorMessage(
                 $this->getSlug(),
                 $setting->getName(),
-                $validator->getMessageBag()->first($setting->getName())
+                $validator->getMessageBag()->first($setting->getName()),
             );
 
-            return '';
+            /**
+             * If validation fails for the field,
+             * we return the old stored value if any.
+             */
+            return get_option($setting->getName());
         }
 
         if ($settingName === $lastSetting->getName() && ! $this->errors) {
             $this->addSettingsSuccessMessage($this->getSlug());
         }
 
-        return $value;
+        $setting->setValue($value);
+
+        return $setting->getValue();
     }
 
     /**
@@ -750,7 +770,7 @@ class Page implements PageInterface
             $slug,
             'settings_updated',
             __('Settings saved.'),
-            'updated'
+            'updated',
         );
     }
 
@@ -766,7 +786,7 @@ class Page implements PageInterface
         $messages = [];
 
         foreach ($setting->getOption('messages', []) as $attr => $message) {
-            $messages[$setting->getName().'.'.$attr] = $message;
+            $messages[$setting->getName() . '.' . $attr] = $message;
         }
 
         return $messages;
@@ -802,7 +822,7 @@ class Page implements PageInterface
             '%s.%s.%s',
             $this->ui()->getTheme(),
             $this->ui()->getLayout(),
-            $section->getView()
+            $section->getView(),
         );
 
         echo $this->ui()->factory()->make($view)->with($section->getViewData())->render();
@@ -819,14 +839,14 @@ class Page implements PageInterface
         $value = get_option($setting->getName(), null);
 
         if (! is_null($value)) {
-            $setting->setValue($value);
+            $setting->setValue($value, false);
         }
 
         $view = sprintf('%s.%s', $this->ui()->getTheme(), $setting->getView(false));
 
         echo $this->ui()->factory()->make($view)->with([
             '__field' => $setting,
-            '__page' => $this
+            '__page' => $this,
         ])->render();
     }
 
@@ -890,7 +910,12 @@ class Page implements PageInterface
 
         if (in_array($action, array_keys($this->routes['get']))) {
             $callback = $this->routes['get'][$action];
-            $response = $this->handleCallback($callback);
+            $response = $this->handleCallback($callback, [$this], false);
+
+            if ($response instanceof RedirectResponse) {
+                $response->send();
+                exit();
+            }
 
             if (! is_a($response, Renderable::class)) {
                 throw new \Exception('The controller method must return a view instance.');
@@ -914,7 +939,14 @@ class Page implements PageInterface
         }
 
         foreach ($this->routes['post'] as $action => $callback) {
-            $this->action->add('admin_post_'.$action, $callback);
+            $this->action->add('admin_post_' . $action, function () use ($callback) {
+                $response = $this->handleCallback($callback, [$this], false);
+
+                if ($response instanceof RedirectResponse) {
+                    $response->send();
+                    exit();
+                }
+            });
         }
     }
 
@@ -948,9 +980,9 @@ class Page implements PageInterface
     protected function registerRouteActions()
     {
         // Actions for page routing.
-        $this->action->add('load-toplevel_page_'.$this->getSlug(), [$this, 'parseGetRoute']);
-        $this->action->add('load-admin_page_'.$this->getSlug(), [$this, 'parseGetRoute']);
-        $this->action->add('load-'.$this->findParentHook().'_page_'.$this->getSlug(), [$this, 'parseGetRoute']);
+        $this->action->add('load-toplevel_page_' . $this->getSlug(), [$this, 'parseGetRoute']);
+        $this->action->add('load-admin_page_' . $this->getSlug(), [$this, 'parseGetRoute']);
+        $this->action->add('load-' . $this->findParentHook() . '_page_' . $this->getSlug(), [$this, 'parseGetRoute']);
         $this->action->add('admin_init', [$this, 'parsePostRoute']);
 
         $this->filter->add('admin_title', [$this, 'handleTitle']);
@@ -967,7 +999,7 @@ class Page implements PageInterface
     protected function parseAction(string $action, string $method): string
     {
         if ('post' === $method) {
-            return $this->getSlug().'_'.$action;
+            return $this->getSlug() . '_' . $action;
         }
 
         return $action;
@@ -1033,5 +1065,10 @@ class Page implements PageInterface
     public function getAction(string $action): string
     {
         return $this->parseAction($action, 'post');
+    }
+
+    public function getPostUrl(): string
+    {
+        return admin_url('admin-post.php');
     }
 }

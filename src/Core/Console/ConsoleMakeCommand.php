@@ -36,7 +36,11 @@ class ConsoleMakeCommand extends GeneratorCommand
      */
     protected function getStub()
     {
-        return __DIR__.'/stubs/console.stub';
+        $relativePath = '/stubs/console.stub';
+
+        return file_exists($customPath = $this->laravel->basePath(trim($relativePath, '/')))
+            ? $customPath
+            : __DIR__ . $relativePath;
     }
 
     /**
@@ -51,7 +55,7 @@ class ConsoleMakeCommand extends GeneratorCommand
     {
         $stub = parent::replaceClass($stub, $name);
 
-        return str_replace('dummy:command', $this->option('command'), $stub);
+        return str_replace(['dummy:command', '{{ command }}'], $this->option('command'), $stub);
     }
 
     /**
@@ -63,7 +67,7 @@ class ConsoleMakeCommand extends GeneratorCommand
      */
     protected function getDefaultNamespace($rootNamespace)
     {
-        return $rootNamespace.'\Console\Commands';
+        return $rootNamespace . '\Console\Commands';
     }
 
     /**
@@ -74,7 +78,7 @@ class ConsoleMakeCommand extends GeneratorCommand
     protected function getArguments()
     {
         return [
-            ['name', InputArgument::REQUIRED, 'The name of the command.']
+            ['name', InputArgument::REQUIRED, 'The name of the command.'],
         ];
     }
 
@@ -91,8 +95,8 @@ class ConsoleMakeCommand extends GeneratorCommand
                 null,
                 InputOption::VALUE_OPTIONAL,
                 'The terminal command that should be assigned.',
-                'command:name'
-            ]
+                'command:name',
+            ],
         ];
     }
 }

@@ -7,6 +7,8 @@ use Composer\Autoload\ClassLoader;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application as ApplicationContract;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
 use Illuminate\Events\EventServiceProvider;
 use Illuminate\Filesystem\Filesystem;
@@ -28,19 +30,28 @@ use Themosis\Core\Bootstrap\EnvironmentLoader;
 use Themosis\Core\Events\LocaleUpdated;
 use Themosis\Route\RouteServiceProvider;
 
-class Application extends Container implements ApplicationContract, HttpKernelInterface
+class Application extends Container implements
+    ApplicationContract,
+    CachesConfiguration,
+    CachesRoutes,
+    HttpKernelInterface
 {
     /**
-     * Application version.
+     * Themosis framework version.
+     */
+    public const THEMOSIS_VERSION = '3.1.0';
+
+    /**
+     * Laravel version.
      *
      * @var string
      */
-    const VERSION = '2.0.6';
+    public const VERSION = '8.0.0';
 
     /**
      * Application textdomain.
      */
-    const TEXTDOMAIN = 'themosis';
+    public const TEXTDOMAIN = 'themosis';
 
     /**
      * Base path of the framework.
@@ -124,6 +135,8 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     protected $namespace;
 
+    protected $storagePath;
+
     public function __construct($basePath = null)
     {
         if ($basePath) {
@@ -156,7 +169,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $this->instance(PackageManifest::class, new PackageManifest(
             new Filesystem(),
             $this->basePath(),
-            $this->getCachedPackagesPath()
+            $this->getCachedPackagesPath(),
         ));
     }
 
@@ -177,172 +190,173 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     {
         $list = [
             'action' => [
-                \Themosis\Hook\ActionBuilder::class
+                \Themosis\Hook\ActionBuilder::class,
             ],
             'ajax' => [
-                \Themosis\Ajax\Ajax::class
+                \Themosis\Ajax\Ajax::class,
             ],
             'app' => [
                 Application::class,
                 \Illuminate\Contracts\Container\Container::class,
                 \Illuminate\Contracts\Foundation\Application::class,
-                \Psr\Container\ContainerInterface::class
+                \Psr\Container\ContainerInterface::class,
             ],
             'asset' => [
                 \Themosis\Asset\Factory::class,
             ],
             'auth' => [
                 \Illuminate\Auth\AuthManager::class,
-                \Illuminate\Contracts\Auth\Factory::class
+                \Illuminate\Contracts\Auth\Factory::class,
             ],
             'auth.driver' => [
-                \Illuminate\Contracts\Auth\Guard::class
+                \Illuminate\Contracts\Auth\Guard::class,
             ],
             'auth.password' => [
                 \Illuminate\Auth\Passwords\PasswordBrokerManager::class,
-                \Illuminate\Contracts\Auth\PasswordBrokerFactory::class
+                \Illuminate\Contracts\Auth\PasswordBrokerFactory::class,
             ],
             'auth.password.broker' => [
                 \Illuminate\Auth\Passwords\PasswordBroker::class,
-                \Illuminate\Contracts\Auth\PasswordBroker::class
+                \Illuminate\Contracts\Auth\PasswordBroker::class,
             ],
             'blade.compiler' => [
-                \Illuminate\View\Compilers\BladeCompiler::class
+                \Illuminate\View\Compilers\BladeCompiler::class,
             ],
             'cache' => [
                 \Illuminate\Cache\CacheManager::class,
-                \Illuminate\Contracts\Cache\Factory::class
+                \Illuminate\Contracts\Cache\Factory::class,
             ],
             'cache.store' => [
                 \Illuminate\Cache\Repository::class,
-                \Illuminate\Contracts\Cache\Repository::class
+                \Illuminate\Contracts\Cache\Repository::class,
             ],
             'config' => [
                 \Illuminate\Config\Repository::class,
-                \Illuminate\Contracts\Config\Repository::class
+                \Illuminate\Contracts\Config\Repository::class,
             ],
             'cookie' => [
                 \Illuminate\Cookie\CookieJar::class,
                 \Illuminate\Contracts\Cookie\Factory::class,
-                \Illuminate\Contracts\Cookie\QueueingFactory::class
+                \Illuminate\Contracts\Cookie\QueueingFactory::class,
             ],
             'db' => [
-                \Illuminate\Database\DatabaseManager::class
+                \Illuminate\Database\ConnectionResolverInterface::class,
+                \Illuminate\Database\DatabaseManager::class,
             ],
             'db.connection' => [
                 \Illuminate\Database\Connection::class,
-                \Illuminate\Database\ConnectionInterface::class
+                \Illuminate\Database\ConnectionInterface::class,
             ],
             'encrypter' => [
                 \Illuminate\Encryption\Encrypter::class,
-                \Illuminate\Contracts\Encryption\Encrypter::class
+                \Illuminate\Contracts\Encryption\Encrypter::class,
             ],
             'events' => [
                 \Illuminate\Events\Dispatcher::class,
-                \Illuminate\Contracts\Events\Dispatcher::class
+                \Illuminate\Contracts\Events\Dispatcher::class,
             ],
             'files' => [
-                \Illuminate\Filesystem\Filesystem::class
+                \Illuminate\Filesystem\Filesystem::class,
             ],
             'filesystem' => [
                 \Illuminate\Filesystem\FilesystemManager::class,
-                \Illuminate\Contracts\Filesystem\Factory::class
+                \Illuminate\Contracts\Filesystem\Factory::class,
             ],
             'filesystem.disk' => [
-                \Illuminate\Contracts\Filesystem\Filesystem::class
+                \Illuminate\Contracts\Filesystem\Filesystem::class,
             ],
             'filesystem.cloud' => [
-                \Illuminate\Contracts\Filesystem\Cloud::class
+                \Illuminate\Contracts\Filesystem\Cloud::class,
             ],
             'filter' => [
-                \Themosis\Hook\FilterBuilder::class
+                \Themosis\Hook\FilterBuilder::class,
             ],
             'form' => [
-                \Themosis\Forms\FormFactory::class
+                \Themosis\Forms\FormFactory::class,
             ],
             'hash' => [
-                \Illuminate\Hashing\HashManager::class
+                \Illuminate\Hashing\HashManager::class,
             ],
             'hash.driver' => [
-                \Illuminate\Contracts\Hashing\Hasher::class
+                \Illuminate\Contracts\Hashing\Hasher::class,
             ],
             'html' => [
-                \Themosis\Html\HtmlBuilder::class
+                \Themosis\Html\HtmlBuilder::class,
             ],
             'log' => [
                 \Illuminate\Log\LogManager::class,
-                \Psr\Log\LoggerInterface::class
+                \Psr\Log\LoggerInterface::class,
             ],
             'mailer' => [
                 \Illuminate\Mail\Mailer::class,
                 \Illuminate\Contracts\Mail\Mailer::class,
-                \Illuminate\Contracts\Mail\MailQueue::class
+                \Illuminate\Contracts\Mail\MailQueue::class,
             ],
             'metabox' => [
-                \Themosis\Metabox\Factory::class
+                \Themosis\Metabox\Factory::class,
             ],
             'posttype' => [
-                \Themosis\PostType\Factory::class
+                \Themosis\PostType\Factory::class,
             ],
             'queue' => [
                 \Illuminate\Queue\QueueManager::class,
                 \Illuminate\Contracts\Queue\Factory::class,
-                \Illuminate\Contracts\Queue\Monitor::class
+                \Illuminate\Contracts\Queue\Monitor::class,
             ],
             'queue.connection' => [
-                \Illuminate\Contracts\Queue\Queue::class
+                \Illuminate\Contracts\Queue\Queue::class,
             ],
             'queue.failer' => [
-                \Illuminate\Queue\Failed\FailedJobProviderInterface::class
+                \Illuminate\Queue\Failed\FailedJobProviderInterface::class,
             ],
             'redirect' => [
-                \Illuminate\Routing\Redirector::class
+                \Illuminate\Routing\Redirector::class,
             ],
             'redis' => [
                 \Illuminate\Redis\RedisManager::class,
-                \Illuminate\Contracts\Redis\Factory::class
+                \Illuminate\Contracts\Redis\Factory::class,
             ],
             'request' => [
                 \Illuminate\Http\Request::class,
-                \Symfony\Component\HttpFoundation\Request::class
+                \Symfony\Component\HttpFoundation\Request::class,
             ],
             'router' => [
                 \Themosis\Route\Router::class,
                 \Illuminate\Routing\Router::class,
                 \Illuminate\Contracts\Routing\Registrar::class,
-                \Illuminate\Contracts\Routing\BindingRegistrar::class
+                \Illuminate\Contracts\Routing\BindingRegistrar::class,
             ],
             'session' => [
-                \Illuminate\Session\SessionManager::class
+                \Illuminate\Session\SessionManager::class,
             ],
             'session.store' => [
                 \Illuminate\Session\Store::class,
-                \Illuminate\Contracts\Session\Session::class
+                \Illuminate\Contracts\Session\Session::class,
             ],
             'taxonomy' => [
-                \Themosis\Taxonomy\Factory::class
+                \Themosis\Taxonomy\Factory::class,
             ],
             'taxonomy.field' => [
-                \Themosis\Taxonomy\TaxonomyFieldFactory::class
+                \Themosis\Taxonomy\TaxonomyFieldFactory::class,
             ],
             'translator' => [
                 \Illuminate\Translation\Translator::class,
-                \Illuminate\Contracts\Translation\Translator::class
+                \Illuminate\Contracts\Translation\Translator::class,
             ],
             'twig' => [
-                \Twig_Environment::class
+                \Twig_Environment::class,
             ],
             'url' => [
                 \Illuminate\Routing\UrlGenerator::class,
-                \Illuminate\Contracts\Routing\UrlGenerator::class
+                \Illuminate\Contracts\Routing\UrlGenerator::class,
             ],
             'validator' => [
                 \Illuminate\Validation\Factory::class,
-                \Illuminate\Contracts\Validation\Factory::class
+                \Illuminate\Contracts\Validation\Factory::class,
             ],
             'view' => [
                 \Illuminate\View\Factory::class,
-                \Illuminate\Contracts\View\Factory::class
+                \Illuminate\Contracts\View\Factory::class,
             ],
         ];
 
@@ -362,7 +376,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function basePath($path = '')
     {
-        return $this->basePath.($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -430,7 +444,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function path($path = '')
     {
-        return $this->basePath.DIRECTORY_SEPARATOR.'app'.($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath . DIRECTORY_SEPARATOR . 'app' . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -442,7 +456,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function contentPath($path = '')
     {
-        return WP_CONTENT_DIR.($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return WP_CONTENT_DIR . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -454,7 +468,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function mupluginsPath($path = '')
     {
-        return $this->contentPath('mu-plugins').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->contentPath('mu-plugins') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -466,7 +480,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function pluginsPath($path = '')
     {
-        return $this->contentPath('plugins').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->contentPath('plugins') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -478,7 +492,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function themesPath($path = '')
     {
-        return $this->contentPath('themes').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->contentPath('themes') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -490,7 +504,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function applicationPath($path = '')
     {
-        return $this->basePath('app').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath('app') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -502,7 +516,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function resourcePath($path = '')
     {
-        return $this->basePath('resources').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath('resources') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -514,7 +528,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function langPath($path = '')
     {
-        return $this->resourcePath('languages').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->resourcePath('languages') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -526,7 +540,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function webPath($path = '')
     {
-        return $this->basePath(THEMOSIS_PUBLIC_DIR).($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath(THEMOSIS_PUBLIC_DIR) . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -539,7 +553,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     public function rootPath($path = '')
     {
         if (defined('THEMOSIS_ROOT')) {
-            return THEMOSIS_ROOT.($path ? DIRECTORY_SEPARATOR.$path : $path);
+            return THEMOSIS_ROOT . ($path ? DIRECTORY_SEPARATOR . $path : $path);
         }
 
         return $this->webPath($path);
@@ -554,7 +568,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function configPath($path = '')
     {
-        return $this->basePath('config').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->basePath('config') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -567,10 +581,26 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     public function storagePath($path = '')
     {
         if (defined('THEMOSIS_ROOT')) {
-            return $this->rootPath('storage').($path ? DIRECTORY_SEPARATOR.$path : $path);
+            return $this->rootPath('storage') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
         }
 
-        return $this->contentPath('storage').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->contentPath('storage') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
+    }
+
+    /**
+     * Set the storage directory.
+     *
+     * @param string $path
+     *
+     * @return $this
+     */
+    public function useStoragePath($path)
+    {
+        $this->storagePath = $path;
+
+        $this->instance('path.storage', $path);
+
+        return $this;
     }
 
     /**
@@ -582,7 +612,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function databasePath($path = '')
     {
-        return $this->rootPath('database').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->rootPath('database') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -594,7 +624,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function bootstrapPath($path = '')
     {
-        return $this->rootPath('bootstrap').($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->rootPath('bootstrap') . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -608,7 +638,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function wordpressPath($path = '')
     {
-        return $this->webPath(env('WP_DIR', 'cms')).($path ? DIRECTORY_SEPARATOR.$path : $path);
+        return $this->webPath(env('WP_DIR', 'cms')) . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
 
     /**
@@ -666,7 +696,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function environmentFilePath()
     {
-        return $this->environmentPath().DIRECTORY_SEPARATOR.$this->environmentFile();
+        return $this->environmentPath() . DIRECTORY_SEPARATOR . $this->environmentFile();
     }
 
     /**
@@ -817,7 +847,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $this->hasBeenBootstrapped = true;
 
         foreach ($bootstrappers as $bootstrapper) {
-            $this['events']->dispatch('bootstrapping: '.$bootstrapper, [$this]);
+            $this['events']->dispatch('bootstrapping: ' . $bootstrapper, [$this]);
 
             /*
              * Instantiate each bootstrap class and call its "bootstrap" method
@@ -825,7 +855,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
              */
             $this->make($bootstrapper)->bootstrap($this);
 
-            $this['events']->dispatch('bootstrapped: '.$bootstrapper, [$this]);
+            $this['events']->dispatch('bootstrapped: ' . $bootstrapper, [$this]);
         }
     }
 
@@ -870,14 +900,16 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      * Boot the given service provider.
      *
      * @param ServiceProvider $provider
-     *
-     * @return mixed
      */
     protected function bootProvider(ServiceProvider $provider)
     {
+        $provider->callBootingCallbacks();
+
         if (method_exists($provider, 'boot')) {
-            return $this->call([$provider, 'boot']);
+            $this->call([$provider, 'boot']);
         }
+
+        $provider->callBootedCallbacks();
     }
 
     /**
@@ -1056,6 +1088,18 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     }
 
     /**
+     * Determine if the given service provider is loaded.
+     *
+     * @param string $provider
+     *
+     * @return bool
+     */
+    public function providerIsLoaded(string $provider)
+    {
+        return isset($this->loadedProviders[$provider]);
+    }
+
+    /**
      * Resolve a service provider instance from the class name.
      *
      * @param string $provider
@@ -1194,7 +1238,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     {
         $plugin = (new PluginManager($this, $filePath, new ClassLoader()))->load($configPath);
 
-        $this->instance('wp.plugin.'.$plugin->getHeader('plugin_id'), $plugin);
+        $this->instance('wp.plugin.' . $plugin->getHeader('plugin_id'), $plugin);
 
         return $plugin;
     }
@@ -1289,7 +1333,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
     public function loadTheme(string $dirPath, string $configPath)
     {
         $theme = (new ThemeManager($this, $dirPath, new ClassLoader()))
-            ->load($dirPath.'/'.trim($configPath, '\/'));
+            ->load($dirPath . '/' . trim($configPath, '\/'));
 
         $this->instance('wp.theme', $theme);
 
@@ -1328,7 +1372,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
 
         foreach (Finder::create()->files()->name('*.php')->in($path) as $file) {
             $directory = $this->getNestedDirectory($file, $path);
-            $files[$directory.basename($file->getRealPath(), '.php')] = $file->getRealPath();
+            $files[$directory . basename($file->getRealPath(), '.php')] = $file->getRealPath();
         }
 
         ksort($files, SORT_NATURAL);
@@ -1349,7 +1393,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $directory = $file->getPath();
 
         if ($nested = trim(str_replace($path, '', $directory), DIRECTORY_SEPARATOR)) {
-            $nested = str_replace(DIRECTORY_SEPARATOR, '.', $nested).'.';
+            $nested = str_replace(DIRECTORY_SEPARATOR, '.', $nested) . '.';
         }
 
         return $nested;
@@ -1410,7 +1454,20 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
         $kernel = $this->make($kernel);
 
         $response = $kernel->handle($request);
-        $response->send();
+        $response->sendHeaders();
+        $response->sendContent();
+
+        if (function_exists('shutdown_action_hook')) {
+            shutdown_action_hook();
+        }
+
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        } elseif (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        } elseif (! in_array(PHP_SAPI, ['cli', 'phpdbg'], true)) {
+            Response::closeOutputBuffers(0, true);
+        }
 
         $kernel->terminate($request, $response);
 
@@ -1483,7 +1540,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function beforeBootstrapping($bootstrapper, Closure $callback)
     {
-        $this['events']->listen('bootstrapping: '.$bootstrapper, $callback);
+        $this['events']->listen('bootstrapping: ' . $bootstrapper, $callback);
     }
 
     /**
@@ -1494,7 +1551,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
      */
     public function afterBootstrapping($bootstrapper, Closure $callback)
     {
-        $this['events']->listen('bootstrapped: '.$bootstrapper, $callback);
+        $this['events']->listen('bootstrapped: ' . $bootstrapper, $callback);
     }
 
     /**
@@ -1648,7 +1705,7 @@ class Application extends Container implements ApplicationContract, HttpKernelIn
 
         if (! empty($data) && is_array($data)) {
             foreach ($data as $key => $value) {
-                $output .= $key.': '.json_encode($value).",\n\r";
+                $output .= $key . ': ' . json_encode($value) . ",\n\r";
             }
         }
 

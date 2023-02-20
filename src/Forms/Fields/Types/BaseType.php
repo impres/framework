@@ -48,7 +48,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         'placeholder',
         'rules',
         'show_in_rest',
-        'theme'
+        'theme',
     ];
 
     /**
@@ -67,7 +67,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         'mapped' => true,
         'messages' => [],
         'rules' => '',
-        'show_in_rest' => false
+        'show_in_rest' => false,
     ];
 
     /**
@@ -261,7 +261,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         $options = array_merge(
             $this->getDefaultOptions(),
             $this->options,
-            $options
+            $options,
         );
 
         if (isset($options['l10n']) && ! empty($l10n)) {
@@ -305,7 +305,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         // Set a default "id" attribute. This attribute can be used on the field
         // and to its associated label as the "for" attribute value if not set.
         if (! isset($options['attributes']['id'])) {
-            $options['attributes']['id'] = $this->getName().'_field';
+            $options['attributes']['id'] = $this->getName() . '_field';
         }
 
         // Set the "for" attribute automatically on the label attributes property.
@@ -416,7 +416,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      */
     public function getName(): string
     {
-        return trim($this->prefix).$this->getBaseName();
+        return trim($this->prefix) . $this->getBaseName();
     }
 
     /**
@@ -485,7 +485,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         }
 
         if (isset($this->options['attributes'][$name])) {
-            $this->options['attributes'][$name] .= ' '.$value;
+            $this->options['attributes'][$name] .= ' ' . $value;
         } else {
             $this->options['attributes'][$name] = $value;
         }
@@ -545,7 +545,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
     protected function getFieldData(): array
     {
         return array_merge($this->data, [
-            '__field' => $this
+            '__field' => $this,
         ]);
     }
 
@@ -646,12 +646,15 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      * Set the value property of the field.
      *
      * @param array|string $value
+     * @param bool         $shouldNotBypassTransformer
      *
      * @return FieldTypeInterface
      */
-    public function setValue($value): FieldTypeInterface
+    public function setValue($value, bool $shouldNotBypassTransformer = true): FieldTypeInterface
     {
-        $this->value = $this->transformer->transform($value);
+        $this->value = $shouldNotBypassTransformer
+            ? $this->transformer->transform($value)
+            : $value;
 
         return $this;
     }
@@ -682,7 +685,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
         $value = $this->transformer->reverseTransform($this->value);
 
         if ($this->getOption('flush', false)) {
-            return '';
+            return null;
         }
 
         return $value;
@@ -894,7 +897,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      *
      * @since 5.0.0
      */
-    public function offsetExists($offset)
+    public function offsetExists($offset): bool
     {
         return isset($this->options[$offset]);
     }
@@ -910,7 +913,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      *
      * @since 5.0.0
      */
-    public function offsetGet($offset)
+    public function offsetGet($offset): mixed
     {
         return isset($this->options[$offset]) ? $this->options[$offset] : null;
     }
@@ -925,7 +928,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      *
      * @since 5.0.0
      */
-    public function offsetSet($offset, $value)
+    public function offsetSet($offset, $value): void
     {
         if (is_null($offset)) {
             $this->options[] = $value;
@@ -943,7 +946,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      *
      * @since 5.0.0
      */
-    public function offsetUnset($offset)
+    public function offsetUnset($offset): void
     {
         unset($this->options[$offset]);
     }
@@ -957,7 +960,7 @@ abstract class BaseType extends HtmlBuilder implements \ArrayAccess, \Countable,
      *
      * @since 5.1.0
      */
-    public function count()
+    public function count(): int
     {
         return count($this->options);
     }

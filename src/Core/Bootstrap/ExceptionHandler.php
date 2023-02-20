@@ -6,9 +6,10 @@ use ErrorException;
 use Exception;
 use Illuminate\Contracts\Debug\ExceptionHandler as ExceptionHandlerContract;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Log\LogManager;
+use Monolog\Handler\NullHandler;
 use Symfony\Component\Console\Output\ConsoleOutput;
-use Symfony\Component\Debug\Exception\FatalErrorException;
-use Symfony\Component\Debug\Exception\FatalThrowableError;
+use Symfony\Component\ErrorHandler\Error\FatalError;
 
 class ExceptionHandler
 {
@@ -17,8 +18,17 @@ class ExceptionHandler
      */
     protected $app;
 
+    /**
+     * Reserved memory so that errors can be displayed properly on memory exhaustion.
+     *
+     * @var string
+     */
+    public static $reservedMemory;
+
     public function bootstrap(Application $app)
     {
+        self::$reservedMemory = str_repeat('x', 10240);
+
         $this->app = $app;
 
         error_reporting(-1);
@@ -47,9 +57,75 @@ class ExceptionHandler
      */
     public function handleError($level, $message, $file = '', $line = 0, $context = [])
     {
+        if ($this->isDeprecation($level)) {
+            return $this->handleDeprecation($message, $file, $line);
+        }
+
         if (error_reporting() & $level) {
             throw new ErrorException($message, 0, $level, $file, $line);
         }
+    }
+
+    /**
+     * Reports a deprecation to the "deprecations" logger.
+     *
+     * @param string $message
+     * @param string $file
+     * @param int    $line
+     */
+    public function handleDeprecation($message, $file, $line)
+    {
+        if (! class_exists(LogManager::class)
+        || ! $this->app->hasBeenBootstrapped()
+        || $this->app->runningUnitTests()) {
+            return;
+        }
+
+        try {
+            $logger = $this->app->make(LogManager::class);
+        } catch (Exception $e) {
+            return;
+        }
+
+        $this->ensureDeprecationLoggerIsConfigured();
+
+        with($logger->channel('deprecations'), function ($log) use ($message, $file, $line) {
+            $log->warning(sprintf(
+                '%s in %s on line %s',
+                $message,
+                $file,
+                $line,
+            ));
+        });
+    }
+
+    protected function ensureDeprecationLoggerIsConfigured()
+    {
+        with($this->app['config'], function ($config) {
+            if ($config->get('logging.channels.deprecations')) {
+                return;
+            }
+
+            $this->ensureNullLogDriverIsConfigured();
+
+            $driver = $config->get('logging.deprecations') ?? 'null';
+
+            $config->set('logging.channels.deprecations', $config->get("logging.channels.{$driver}"));
+        });
+    }
+
+    protected function ensureNullLogDriverIsConfigured()
+    {
+        with($this->app['config'], function ($config) {
+            if ($config->get('logging.channels.null')) {
+                return;
+            }
+
+            $config->set('logging.channels.null', [
+                'driver' => 'monolog',
+                'handler' => NullHandler::class,
+            ]);
+        });
     }
 
     /**
@@ -57,13 +133,11 @@ class ExceptionHandler
      *
      * @param \Throwable $e
      */
-    public function handleException($e)
+    public function handleException(\Throwable $e)
     {
-        if (! $e instanceof Exception) {
-            $e = new FatalThrowableError($e);
-        }
-
         try {
+            self::$reservedMemory = null;
+
             $this->getExceptionHandler()->report($e);
         } catch (Exception $e) {
             //
@@ -87,6 +161,18 @@ class ExceptionHandler
     }
 
     /**
+     * Determine if the error level is a deprecation.
+     *
+     * @param int $level
+     *
+     * @return bool
+     */
+    protected function isDeprecation($level)
+    {
+        return in_array($level, [E_DEPRECATED, E_USER_DEPRECATED]);
+    }
+
+    /**
      * Determine if the error type is fatal.
      *
      * @param int $type
@@ -104,26 +190,24 @@ class ExceptionHandler
      * @param array    $error
      * @param int|null $traceOffset
      *
-     * @return \Symfony\Component\Debug\Exception\FatalErrorException
+     * @return \Symfony\Component\ErrorHandler\Error\FatalError
      */
     protected function fatalExceptionFromError(array $error, $traceOffset = null)
     {
-        return new FatalErrorException(
+        return new FatalError(
             $error['message'],
-            $error['type'],
             0,
-            $error['file'],
-            $error['line'],
-            $traceOffset
+            $error,
+            $traceOffset,
         );
     }
 
     /**
      * Render an exception to the console.
      *
-     * @param Exception $e
+     * @param \Throwable $e
      */
-    protected function renderForConsole(Exception $e)
+    protected function renderForConsole(\Throwable $e)
     {
         $this->getExceptionHandler()->renderForConsole(new ConsoleOutput(), $e);
     }
@@ -131,9 +215,9 @@ class ExceptionHandler
     /**
      * Render an exception as an HTTP Response and send it.
      *
-     * @param Exception $e
+     * @param \Throwable $e
      */
-    protected function renderHttpResponse(Exception $e)
+    protected function renderHttpResponse(\Throwable $e)
     {
         $this->getExceptionHandler()->render($this->app['request'], $e)->send();
     }

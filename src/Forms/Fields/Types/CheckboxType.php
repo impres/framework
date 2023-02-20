@@ -52,9 +52,9 @@ class CheckboxType extends BaseType implements
         // Set some default CSS classes if chosen theme is "bootstrap".
         if (isset($options['theme']) && 'bootstrap' === $options['theme']) {
             $options['attributes']['class'] = isset($options['attributes']['class']) ?
-                'form-check-input '.$options['attributes']['class'] : 'form-check-input';
+                'form-check-input ' . $options['attributes']['class'] : 'form-check-input';
             $options['label_attr']['class'] = isset($options['label_attr']['class']) ?
-                'form-check-label '.$options['label_attr']['class'] : 'form-check-label';
+                'form-check-label ' . $options['label_attr']['class'] : 'form-check-label';
         }
 
         return $options;
@@ -64,12 +64,13 @@ class CheckboxType extends BaseType implements
      * @inheritdoc
      *
      * @param string $value
+     * @param bool   $shouldNotBypassTransformer
      *
      * @return FieldTypeInterface
      */
-    public function setValue($value): FieldTypeInterface
+    public function setValue($value, bool $shouldNotBypassTransformer = true): FieldTypeInterface
     {
-        parent::setValue($value);
+        parent::setValue($value, $shouldNotBypassTransformer);
 
         if ($this->getValue()) {
             // The value is only set on the field when it fails

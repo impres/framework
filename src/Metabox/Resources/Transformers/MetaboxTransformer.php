@@ -11,13 +11,13 @@ use Themosis\Metabox\Contracts\MetaboxInterface;
 
 class MetaboxTransformer extends TransformerAbstract
 {
-    /**
-     * @var array
-     */
-    protected $defaultIncludes = [
-        'fields',
-        'groups'
-    ];
+    public function __construct()
+    {
+        $this->defaultIncludes = [
+            'fields',
+            'groups',
+        ];
+    }
 
     /**
      * Transform the metabox to a resource.
@@ -55,14 +55,14 @@ class MetaboxTransformer extends TransformerAbstract
         if ($screen instanceof \WP_Screen) {
             return [
                 'id' => $screen->id,
-                'post_type' => $screen->post_type
+                'post_type' => $screen->post_type,
             ];
         }
 
         // Screen is still a string.
         return [
             'id' => $screen,
-            'post_type' => $screen
+            'post_type' => $screen,
         ];
     }
 
@@ -83,7 +83,7 @@ class MetaboxTransformer extends TransformerAbstract
 
                 /** @var FieldTransformer $transformer */
                 return $transformer->transform($field);
-            }
+            },
         );
     }
 
@@ -98,7 +98,7 @@ class MetaboxTransformer extends TransformerAbstract
     {
         return $this->collection(
             $metabox->repository()->getGroups(),
-            new GroupTransformer()
+            new GroupTransformer(),
         );
     }
 }

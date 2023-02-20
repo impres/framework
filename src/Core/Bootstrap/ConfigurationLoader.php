@@ -10,22 +10,15 @@ use Symfony\Component\Finder\Finder;
 
 class ConfigurationLoader
 {
-    /**
-     * @var Application
-     */
-    protected $app;
-
     public function bootstrap(Application $app)
     {
-        $this->app = $app;
-
         $items = [];
 
         /*
          * Verify if configuration is cached. If so, fetch it
          * to avoid parsing all config files.
          */
-        if (file_exists($cached = $app->getCachedConfigPath())) {
+        if (is_file($cached = $app->getCachedConfigPath())) {
             $items = require $cached;
             $loadedFromCache = true;
         }
@@ -37,6 +30,8 @@ class ConfigurationLoader
 
         if (! isset($loadedFromCache)) {
             $this->loadConfigurationFiles($app, $config);
+        } else {
+            $this->maybeForceWpConfigInclude();
         }
 
         /*
@@ -61,22 +56,47 @@ class ConfigurationLoader
      *
      * @throws Exception
      */
-    protected function loadConfigurationFiles(Application $app, RepositoryContract $repository)
+    protected function loadConfigurationFiles(Application $app, RepositoryContract $repository): void
     {
         $files = $this->getConfigurationFiles($app);
 
         if (! isset($files['app'])) {
             throw new Exception('Unable to load the "app" configuration file.');
         }
-
         foreach ($files as $key => $path) {
             // Avoid duplicate constant definitions.
-            if ('wordpress' === $key && defined('AUTH_KEY')) {
+            if ('wordpress' === $key && $this->isWordPressConfigLoaded()) {
                 continue;
             }
 
             $repository->set($key, require $path);
         }
+    }
+
+    /**
+     * Do we need to include the wordpress config file if cached config is loaded?
+     */
+    protected function maybeForceWpConfigInclude(): void
+    {
+        // Avoid duplicate constants definitions.
+        if ($this->isWordPressConfigLoaded()) {
+            return;
+        }
+        $cacheConfig = app()->getCachedConfigPath('config.php');
+
+        if (! file_exists($cacheConfig)) {
+            return;
+        }
+
+        require_once app()->configPath('wordpress.php');
+    }
+
+    /**
+     * Check if the WordPress config constants are already defined.
+     */
+    protected function isWordPressConfigLoaded(): bool
+    {
+        return defined('AUTH_KEY');
     }
 
     /**
@@ -93,7 +113,7 @@ class ConfigurationLoader
         foreach (Finder::create()->files()->name('*.php')->in($app->configPath()) as $file) {
             $directory = $this->getNestedDirectory($file, $app->configPath());
 
-            $files[$directory.basename($file->getRealPath(), '.php')] = $file->getRealPath();
+            $files[$directory . basename($file->getRealPath(), '.php')] = $file->getRealPath();
         }
 
         ksort($files, SORT_NATURAL);
@@ -114,7 +134,7 @@ class ConfigurationLoader
         $directory = $file->getPath();
 
         if ($nested = trim(str_replace($path, '', $directory), DIRECTORY_SEPARATOR)) {
-            $nested = str_replace(DIRECTORY_SEPARATOR, '.', $nested).'.';
+            $nested = str_replace(DIRECTORY_SEPARATOR, '.', $nested) . '.';
         }
 
         return $nested;
